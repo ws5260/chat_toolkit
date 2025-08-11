@@ -25,13 +25,10 @@ dev_dependencies:
 # The following section is specific to Flutter packages.
 flutter:
   # Specify the platforms that this package supports
-  platforms:
-    android:
-    ios:
-    linux:
-    macos:
-    web:
-    windows:
+  plugin:
+    platforms:
+      web:
+        pluginClass: ChatToolkitPlugin
 
   # To add assets to your package, add an assets section, like this:
   # assets:
