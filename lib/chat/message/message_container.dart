@@ -10,6 +10,7 @@ class MessageContainer extends StatelessWidget {
     required this.message,
     required this.isBaseAxisStart,
     required this.bubbleBuilder,
+    required this.timeBuilder,
     required this.isSender,
     required this.maxWidth,
     this.loadingWidget = const MessageLoading(),
@@ -22,6 +23,7 @@ class MessageContainer extends StatelessWidget {
   final bool isSender;
   final Widget Function(BuildContext context, Widget child, bool isSender)
       bubbleBuilder;
+  final Widget Function(BuildContext context, String timestamp) timeBuilder;
   final VoidCallback? onDelete;
   final VoidCallback? onRetry;
   final Widget loadingWidget;
@@ -35,13 +37,7 @@ class MessageContainer extends StatelessWidget {
         onRetry: onRetry,
       );
     } else if (!message.isLoading) {
-      trailWidget = Text(
-        message.timestamp,
-        style: TextStyle(
-            fontSize: 14,
-            fontWeight: FontWeight.w400,
-            color: const Color(0xFF0D082C).withOpacity(0.4)),
-      );
+      trailWidget = timeBuilder(context, message.timestamp);
     }
     return Row(
       mainAxisAlignment:

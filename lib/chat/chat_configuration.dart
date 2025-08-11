@@ -84,7 +84,14 @@ class BubbleConfiguration {
   }
 
   Widget buildTime(BuildContext context, String timestamp) {
-    return timeBuilder?.call(context, timestamp) ?? Text(timestamp);
+    return timeBuilder?.call(context, timestamp) ??
+        Text(
+          DateFormat("yyyy.MM.dd").format(DateTime.parse(timestamp)),
+          style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w400,
+              color: const Color(0xFF0D082C).withOpacity(0.4)),
+        );
   }
 }
 

@@ -60,3 +60,9 @@ fix: Add missing filename configuration for web platform
 ### FIXED
 
 - Remove plugin in pubspec.yaml web platform configuration
+
+## 1.2.0
+
+### Added
+
+- **Message Bubble Time Builder**: Message Bubble timestamp custom builder

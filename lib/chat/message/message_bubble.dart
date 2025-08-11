@@ -39,6 +39,7 @@ class _MessageBubbleState extends State<MessageBubble> {
       children: [
         MessageContainer(
           bubbleBuilder: bubbleConfiguration.buildBubble,
+          timeBuilder: bubbleConfiguration.buildTime,
           message: widget.message,
           isBaseAxisStart: isAxisStart,
           isSender: widget.message.isSender,
