@@ -1,3 +1,41 @@
-## 0.0.1
+## 1.0.0
 
-* TODO: Describe initial release.
+### Added
+
+- **Core Chat Widget**: Complete chat interface with message display and input functionality
+- **Message System**:
+  - Support for sender and receiver message types
+  - Message elements architecture for extensible content types
+  - Message grouping functionality for better organization
+  - Unique message ID generation using UUID
+  - Message state management (loading, failed, success)
+- **Chat Controller**:
+  - Scroll controller with chat-specific functionality
+  - Message dispatch system with result callbacks
+  - Stream-based message handling for real-time updates
+  - Failed message retry mechanism
+  - Collapsible chat state management
+- **Customizable UI Components**:
+  - Configurable message bubbles with sender/receiver styling
+  - Customizable profile display with avatar and name
+  - Flexible timestamp rendering
+  - Loading state indicators
+  - Input field with emoji and send button support
+- **Configuration Options**:
+  - Chat alignment settings (start/end positioning)
+  - Custom input field support
+  - New message notification builders
+  - Bubble appearance customization
+  - Scroll threshold configuration for new messages
+- **Read-Only Mode**: Support for display-only chat interfaces
+- **Responsive Design**: Auto-sizing widgets with width detection
+- **Internationalization**: Built-in support with intl package
+- **Memory Management**: Proper disposal patterns and lifecycle management
+
+### Dependencies
+
+- Flutter SDK >=1.17.0
+- Dart SDK ^3.5.0
+- gap: ^3.0.1 (spacing utilities)
+- intl: ^0.19.0 (internationalization)
+- uuid: ^4.5.1 (unique ID generation)
