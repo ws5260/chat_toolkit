@@ -1,6 +1,10 @@
 import 'package:chat_toolkit/chat/message/elements/message_element.dart';
 import 'package:uuid/uuid.dart';
 
+export 'package:chat_toolkit/chat/message/entity/failed_message_entry.dart';
+export 'package:chat_toolkit/chat/message/elements/message_element.dart';
+export 'package:chat_toolkit/chat/message/entity/message_group.dart';
+
 abstract class Message {
   final String id;
   final String timestamp;

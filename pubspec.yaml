@@ -29,6 +29,7 @@ flutter:
     platforms:
       web:
         pluginClass: ChatToolkitPlugin
+        fileName: chat_toolkit.dart
 
   # To add assets to your package, add an assets section, like this:
   # assets:
