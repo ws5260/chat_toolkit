@@ -198,7 +198,7 @@ final loadingMessage = SenderMessage(
 
 ## Requirements
 
-- Flutter SDK: >=1.17.0
+- Flutter SDK: >=3.24.0
 - Dart SDK: ^3.5.0
 
 ## Dependencies

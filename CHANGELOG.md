@@ -34,8 +34,14 @@
 
 ### Dependencies
 
-- Flutter SDK >=1.17.0
+- Flutter SDK >=3.24.0
 - Dart SDK ^3.5.0
 - gap: ^3.0.1 (spacing utilities)
 - intl: ^0.19.0 (internationalization)
 - uuid: ^4.5.1 (unique ID generation)
+
+## 1.1.0
+
+### Added
+
+- **Date Separator Builder**: Date Separator Custom Builder

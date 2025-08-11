@@ -4,6 +4,7 @@ import 'package:chat_toolkit/chat/message/entity/message.dart';
 import 'package:chat_toolkit/chat/message/message_loading.dart';
 import 'package:flutter/material.dart';
 import 'package:gap/gap.dart';
+import 'package:intl/intl.dart';
 
 class BubbleConfiguration {
   final Widget Function(BuildContext context, String name)? profileBuilder;
@@ -92,16 +93,16 @@ enum ChatAlignment {
   end,
 }
 
-
 /*
   채팅
 */
 class ChatConfiguration {
   final ChatAlignment senderAlignment;
- 
   final Widget Function(BuildContext, ChatController)? customInputField;
   final Widget Function(BuildContext, Message)?
       newReceiveMessageNotificationBuilder;
+  final Widget Function(BuildContext, String)? dateSeparatorBuilder;
+
   final BubbleConfiguration bubbleConfiguration;
   final double newMessageScrollThreshold;
 
@@ -111,6 +112,7 @@ class ChatConfiguration {
     this.newReceiveMessageNotificationBuilder,
     this.bubbleConfiguration = const BubbleConfiguration(),
     this.newMessageScrollThreshold = 300,
+    this.dateSeparatorBuilder,
   });
 
   bool get isPrevProfile => senderAlignment == ChatAlignment.start;
@@ -118,5 +120,27 @@ class ChatConfiguration {
   Widget buildInputField(BuildContext context, ChatController controller) {
     return customInputField?.call(context, controller) ??
         const ChatInputField();
+  }
+
+  Widget buildDateDivider(BuildContext context, String timestamp) {
+    return dateSeparatorBuilder?.call(context, timestamp) ??
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 24),
+          child: Row(
+            children: [
+              const Expanded(child: Divider()),
+              const Gap(20),
+              Text(
+                DateFormat("yyyy.MM.dd").format(DateTime.parse(timestamp)),
+                style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
+                    color: Color(0xFF565656)),
+              ),
+              const Gap(20),
+              const Expanded(child: Divider()),
+            ],
+          ),
+        );
   }
 }

@@ -9,7 +9,6 @@ import 'package:chat_toolkit/chat/message/message_bubble.dart';
 import 'package:chat_toolkit/chat/size_detected_widget.dart';
 import 'package:flutter/material.dart';
 import 'package:gap/gap.dart';
-import 'package:intl/intl.dart';
 
 class Chat extends StatefulWidget {
   const Chat(
@@ -228,25 +227,8 @@ class _ChatState extends State<Chat> {
         chatController.isDateChangedComparedTo(
             messageGroups[index].messages.first,
             messageGroups[index + 1].messages.first)) {
-      return Padding(
-        padding: const EdgeInsets.symmetric(vertical: 24),
-        child: Row(
-          children: [
-            const Expanded(child: Divider()),
-            const Gap(20),
-            Text(
-              DateFormat("yyyy.MM.dd")
-                  .format(DateTime.parse(messageGroups[index + 1].timestamp)),
-              style: const TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w500,
-                  color: Color(0xFF565656)),
-            ),
-            const Gap(20),
-            const Expanded(child: Divider()),
-          ],
-        ),
-      );
+      return widget.configuration.buildDateDivider(
+          context, messageGroups[index].messages.first.timestamp);
     }
 
     return const Gap(24);
