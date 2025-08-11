@@ -13,7 +13,6 @@ A comprehensive and customizable chat widget toolkit for Flutter applications. T
 - **Responsive Design**: Auto-sizing components that adapt to different screen sizes
 - **Read-only Mode**: Display-only chat interfaces for viewing conversations
 - **Scroll Management**: Intelligent scroll behavior with new message notifications
-- **Internationalization**: Built-in i18n support
 
 ## Getting Started
 

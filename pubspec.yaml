@@ -1,5 +1,5 @@
 name: chat_toolkit
-description: "this is a chat toolkit for flutter"
+description: "A comprehensive and customizable chat widget toolkit for Flutter applications with message handling, real-time updates, and extensive customization options."
 version: 1.0.0
 homepage: https://github.com/ws5260/chat_toolkit
 
@@ -24,6 +24,14 @@ dev_dependencies:
 
 # The following section is specific to Flutter packages.
 flutter:
+  # Specify the platforms that this package supports
+  platforms:
+    android:
+    ios:
+    linux:
+    macos:
+    web:
+    windows:
 
   # To add assets to your package, add an assets section, like this:
   # assets:
