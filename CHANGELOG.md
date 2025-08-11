@@ -45,3 +45,12 @@
 ### Added
 
 - **Date Separator Builder**: Date Separator Custom Builder
+
+## 1.1.1
+
+### FIXED
+
+fix: Add missing filename configuration for web platform
+
+- Fix missing filename property in pubspec.yaml web platform configuration
+- Resolves pub.dev analysis warning about web platform setup
