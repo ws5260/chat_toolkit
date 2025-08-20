@@ -74,3 +74,7 @@ fix: Add missing filename configuration for web platform
 ## 1.3.1
 
 - **Remove Reverse Setting**: Removed the reverse parameter from ChatController configuration
+
+## 1.3.2
+
+- Fix: Apply missing changes that were accidentally not included in the previous release
