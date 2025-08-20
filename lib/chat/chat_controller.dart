@@ -1,47 +1,96 @@
 import 'dart:async';
 
-import 'package:chat_toolkit/chat/message/entity/failed_message_entry.dart';
 import 'package:chat_toolkit/chat/message/entity/message.dart';
-import 'package:chat_toolkit/chat/message/entity/message_group.dart';
 import 'package:flutter/material.dart';
 
+/// Callback function type for message dispatch operations.
+///
+/// Takes a [Message] and returns a [Future] that resolves to the processed
+/// message or null if the operation failed.
 typedef MessageDispatchCallback = Future<Message?> Function(Message);
 
+/// Result of a message dispatch operation.
+///
+/// Contains information about the success status and any exceptions
+/// that occurred during the dispatch process.
 class MessageDispatchResult {
+  /// The original message that was dispatched.
   final Message message;
+
+  /// Whether the dispatch operation was successful.
   final bool isSuccess;
+
+  /// Exception that occurred during dispatch, if any.
   final Exception? exception;
 
   MessageDispatchResult(
       {required this.message, required this.isSuccess, this.exception});
 }
 
+/// Controller that manages chat state and behavior.
+///
+/// This controller extends [ScrollController] to provide scrolling functionality
+/// while also managing message state, dispatch operations, and failed message
+/// handling. It follows the Single Responsibility Principle by focusing on
+/// chat-specific state management.
+///
+/// Key responsibilities:
+/// - Message state management
+/// - Scroll behavior control
+/// - Message dispatch and retry logic
+/// - Failed message tracking
+/// - Stream-based event notifications
+///
+/// Example usage:
+/// ```dart
+/// final controller = ChatController();
+/// controller.addMessage(message);
+/// controller.dispatchMessage(
+///   message,
+///   onDispatch: (msg) async {
+///     // Send message to server
+///     return processedMessage;
+///   },
+/// );
+/// ```
 class ChatController extends ScrollController {
   final StreamController<MessageDispatchResult> _dispatchResultController =
       StreamController.broadcast();
   final StreamController<Message> _newReceiveMessageController =
       StreamController.broadcast();
 
+  /// Stream of message dispatch results.
+  ///
+  /// Emits [MessageDispatchResult] objects when messages are dispatched,
+  /// allowing listeners to handle success/failure states.
   Stream<MessageDispatchResult> get dispatchResultStream =>
       _dispatchResultController.stream;
 
+  /// Stream of newly received messages.
+  ///
+  /// Emits [Message] objects when new messages are received (not sent),
+  /// useful for triggering notifications or scroll behavior.
   Stream<Message> get newReceiveMessageStream =>
       _newReceiveMessageController.stream;
 
   final List<MessageGroup> _messageGroups = [];
+
+  /// List of message groups organized by sender and time.
+  ///
+  /// Messages are automatically grouped by sender and timestamp proximity
+  /// to create a natural conversation flow.
   List<MessageGroup> get messageGroups => _messageGroups;
 
   final Map<String, FailedMessageEntry> _failedMessageEntries = {};
 
   bool _isCollapsed = false;
 
+  /// Whether the chat is currently in collapsed state.
   bool get isCollapsed => _isCollapsed;
-
-  late final bool _reverse;
-  bool get reverse => _reverse;
 
   bool _isDisposed = false;
 
+  /// Whether this controller has been disposed.
   bool get isDisposed => _isDisposed;
 
   @override
@@ -50,11 +99,20 @@ class ChatController extends ScrollController {
     super.notifyListeners();
   }
 
+  /// Sets the collapsed state of the chat.
+  ///
+  /// This method follows the Open/Closed Principle by allowing
+  /// external control of the chat's visual state.
   setIsCollapsed(bool value) {
     _isCollapsed = value;
     notifyListeners();
   }
 
+  /// Initializes the chat with a list of messages.
+  ///
+  /// This method replaces all existing messages and re-groups them
+  /// based on sender and timestamp. Messages are automatically sorted
+  /// chronologically.
   void setMessages(List<Message> messages) {
     _messageGroups.clear();
     messages.sort((a, b) {
@@ -69,6 +127,11 @@ class ChatController extends ScrollController {
     }
   }
 
+  /// Appends older messages to the beginning of the chat.
+  ///
+  /// This method is typically used for pagination when loading
+  /// historical messages. Messages are inserted at the top while
+  /// maintaining proper grouping.
   void appendMessages(List<Message> messages) {
     for (final message in messages) {
       if (_messageGroups.first.isSender == message.isSender &&
@@ -89,9 +152,9 @@ class ChatController extends ScrollController {
     notifyListeners();
   }
 
-  ChatController({bool reverse = false}) {
-    _reverse = reverse;
-  }
+  /// Creates a new ChatController.
+  ///
+  ChatController();
 
   @override
   void dispose() {
@@ -102,20 +165,16 @@ class ChatController extends ScrollController {
     super.dispose();
   }
 
+  /// Smoothly scrolls to the bottom of the chat.
+  ///
+  /// It performs an initial jump followed by a smooth animation
+  /// for better user experience.
   void scrollToBottom() async {
-    double getMovePosition() {
-      if (reverse) {
-        return 0.0;
-      } else {
-        return position.maxScrollExtent;
-      }
-    }
-
     if (hasClients) {
-      double movePosition = getMovePosition();
+      double movePosition = 0.0;
       jumpTo(movePosition);
       WidgetsBinding.instance.addPostFrameCallback((_) async {
-        movePosition = getMovePosition();
+        movePosition = 0.0;
         animateTo(
           movePosition,
           duration: const Duration(milliseconds: 50),
@@ -146,6 +205,14 @@ class ChatController extends ScrollController {
     }
   }
 
+  /// Adds a message to the chat.
+  ///
+  /// Messages are automatically grouped with other messages from the same
+  /// sender if they are sent within the same minute. This follows the
+  /// Single Responsibility Principle by handling both message addition
+  /// and grouping logic.
+  ///
+  /// Returns the [MessageGroup] that contains the added message.
   MessageGroup addMessage(Message message) {
     // _messages.add(message);
     // _messages.sort((a, b) {
@@ -212,6 +279,18 @@ class ChatController extends ScrollController {
     return messageGroup;
   }
 
+  /// Dispatches a message through the provided callback.
+  ///
+  /// This method handles the complete message lifecycle:
+  /// 1. Adds the message with loading state
+  /// 2. Calls the dispatch callback
+  /// 3. Updates the message based on the result
+  /// 4. Handles failures and retry logic
+  ///
+  /// The [onDispatch] callback should return the processed message
+  /// or null if the operation failed.
+  ///
+  /// Returns a [MessageDispatchResult] indicating success or failure.
   Future<MessageDispatchResult> dispatchMessage(
     Message message, {
     required MessageDispatchCallback onDispatch,
@@ -259,6 +338,11 @@ class ChatController extends ScrollController {
     return dispatchResult;
   }
 
+  /// Retries a failed message.
+  ///
+  /// This method attempts to re-dispatch a message that previously failed.
+  /// It removes the failed message from the UI and attempts dispatch again
+  /// using the original dispatch callback.
   Future retryMessage(Message message) async {
     final entry = _failedMessageEntries[message.id];
     if (entry == null) {
@@ -288,6 +372,11 @@ class ChatController extends ScrollController {
     });
   }
 
+  /// Removes a message from all groups and cleans up empty groups.
+  ///
+  /// This method ensures data consistency by removing the message
+  /// from all possible locations and cleaning up any empty groups
+  /// that result from the removal.
   void removeMessageEverywhere(Message message) {
     for (final group in _messageGroups.toList()) {
       group.messages.removeWhere((m) => m.id == message.id);
@@ -337,13 +426,16 @@ class ChatController extends ScrollController {
         a.minute == b.minute;
   }
 
+  /// Checks if the scroll position is at the bottom within a threshold.
+  ///
+  /// Returns true if the user is close enough to the bottom to trigger
+  /// auto-scroll or other bottom-related behaviors.
+  ///
+  /// The [threshold] parameter defines how close to the bottom
+  /// the position needs to be (in pixels).
   bool isAtBottom({double threshold = 20}) {
     if (!hasClients) return true;
-    if (reverse) {
-      return position.pixels <= threshold;
-    } else {
-      return (position.maxScrollExtent - position.pixels) <= threshold;
-    }
+    return position.pixels <= threshold;
   }
 
   bool containsMessageId(String messageId) {

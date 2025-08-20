@@ -66,3 +66,11 @@ fix: Add missing filename configuration for web platform
 ### Added
 
 - **Message Bubble Time Builder**: Message Bubble timestamp custom builder
+
+## 1.3.0
+
+- **Read Only Custom Widget**: Added a read-only widget that displays when the chat is in read-only mode
+
+## 1.3.1
+
+- **Remove Reverse Setting**: Removed the reverse parameter from ChatController configuration

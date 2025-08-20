@@ -20,7 +20,7 @@ Add this package to your `pubspec.yaml`:
 
 ```yaml
 dependencies:
-  chat_toolkit: ^1.0.0
+  chat_toolkit: ^1.3.0
 ```
 
 Then run:
@@ -111,6 +111,24 @@ Chat(
 )
 ```
 
+### Custom Message Element
+
+```dart
+class ImageElement extends MessageElement {
+  final String url;
+  final double? width;
+  final double? height;
+  const ImageElement({required this.url, this.width, this.height});
+
+  @override
+  Widget toWidget(BuildContext context) {
+    return Image.network(
+      url,width: width, height, height
+    );
+  }
+}
+```
+
 ### Message Handling
 
 ```dart
@@ -144,8 +162,68 @@ chatController.newReceiveMessageStream.listen((message) {
 Chat(
   readOnly: true,
   chatController: chatController,
-  configuration: ChatConfiguration(),
+  configuration: ChatConfiguration(
+    readOnlyWidget: Container(
+      padding: EdgeInsets.all(16),
+      child: Text('This conversation is read-only'),
+    ),
+  ),
 )
+```
+
+### Infinite Scroll (Load More Messages)
+
+```dart
+class ChatScreen extends StatefulWidget {
+  @override
+  _ChatScreenState createState() => _ChatScreenState();
+}
+
+class _ChatScreenState extends State<ChatScreen> {
+  late ChatController chatController;
+  bool hasMoreMessages = true;
+
+  @override
+  void initState() {
+    super.initState();
+    chatController = ChatController();
+  }
+
+  Future<void> _loadMoreMessages() async {
+    if (!hasMoreMessages) return;
+
+    // Fetch older messages from your API
+    final olderMessages = await _fetchOlderMessages();
+
+    if (olderMessages.isEmpty) {
+      hasMoreMessages = false;
+    } else {
+      chatController.appendMessages(olderMessages);
+    }
+  }
+
+  Future<List<Message>> _fetchOlderMessages() async {
+    // Replace with your actual API call
+    return [
+      ReceiverMessage(
+        id: 'older_msg_1',
+        name: 'Support',
+        timestamp: DateTime.now().subtract(Duration(hours: 2)).toIso8601String(),
+        elements: [TextMessageElement(text: 'Previous message')],
+      ),
+    ];
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: Chat(
+        chatController: chatController,
+        onScrollToTop: _loadMoreMessages,
+      ),
+    );
+  }
+}
 ```
 
 ## Message Types
