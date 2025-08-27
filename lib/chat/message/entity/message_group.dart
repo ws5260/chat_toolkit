@@ -60,6 +60,8 @@ class MessageGroup {
       if (a is SenderMessage && b is SenderMessage) {
         if (a.isFailed && !b.isFailed) return 1;
         if (!a.isFailed && b.isFailed) return -1;
+        if (a.isLoading && !b.isLoading) return 1;
+        if (!a.isLoading && b.isLoading) return -1;
       }
       final aTimestamp = DateTime.parse(a.timestamp);
       final bTimestamp = DateTime.parse(b.timestamp);
