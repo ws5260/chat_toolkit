@@ -78,3 +78,13 @@ fix: Add missing filename configuration for web platform
 ## 1.3.2
 
 - Fix: Apply missing changes that were accidentally not included in the previous release
+
+## 1.3.3
+
+### Added
+
+- **ChatController Custom Sorting**: Added a message custom sorting feature
+
+### Fix
+
+- Add loading message sorting to message prioritization logic
