@@ -124,11 +124,10 @@ class _ChatState extends State<Chat> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (chatController.position.pixels >=
           chatController.position.maxScrollExtent - 20) {
-        _debounceTimer = Timer(_debounceDuration, () {});
-
         widget.onScrollToTop?.call().then((value) async {
           _debounceTimer?.cancel();
         });
+        _debounceTimer = Timer(_debounceDuration, () {});
       }
     });
   }

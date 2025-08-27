@@ -10,6 +10,7 @@ A comprehensive and customizable chat widget toolkit for Flutter applications. T
 - **Customizable UI**: Fully customizable message bubbles, profiles, and input fields
 - **Message States**: Built-in support for loading, failed, and success message states
 - **Message Grouping**: Automatic message organization and grouping
+- **Custom Message Sorting**: Configurable priority system for messages with identical timestamps
 - **Responsive Design**: Auto-sizing components that adapt to different screen sizes
 - **Read-only Mode**: Display-only chat interfaces for viewing conversations
 - **Scroll Management**: Intelligent scroll behavior with new message notifications
@@ -20,7 +21,7 @@ Add this package to your `pubspec.yaml`:
 
 ```yaml
 dependencies:
-  chat_toolkit: ^1.3.0
+  chat_toolkit: $latest_version
 ```
 
 Then run:
@@ -29,9 +30,7 @@ Then run:
 flutter pub get
 ```
 
-## Usage
-
-### Basic Implementation
+## Quick Start
 
 ```dart
 import 'package:flutter/material.dart';
@@ -49,21 +48,6 @@ class _ChatScreenState extends State<ChatScreen> {
   void initState() {
     super.initState();
     chatController = ChatController();
-
-    // Add some sample messages
-    chatController.setMessages([
-      ReceiverMessage(
-        id: '1',
-        name: 'John',
-        timestamp: DateTime.now().toIso8601String(),
-        elements: [TextMessageElement(text: 'Hello! How are you?')],
-      ),
-      SenderMessage(
-        name: 'You',
-        timestamp: DateTime.now().toIso8601String(),
-        elements: [TextMessageElement(text: 'I\'m doing great, thanks!')],
-      ),
-    ]);
   }
 
   @override
@@ -85,7 +69,49 @@ class _ChatScreenState extends State<ChatScreen> {
 }
 ```
 
-### Custom Configuration
+## Core Usage
+
+### Adding Messages
+
+```dart
+// Add a simple text message
+chatController.addMessage(
+  SenderMessage(
+    name: 'You',
+    timestamp: DateTime.now().toIso8601String(),
+    elements: [TextMessageElement(text: 'Hello!')],
+  ),
+);
+```
+
+### Async Message Sending
+
+```dart
+final result = await chatController.dispatchMessage(
+  message,
+  onDispatch: (message) async {
+    // Your API call here
+    final response = await yourApiCall(message);
+    return response; // Return processed message or null if failed
+  },
+);
+```
+
+### Loading More Messages
+
+```dart
+Chat(
+  chatController: chatController,
+  onScrollToTop: () async {
+    final olderMessages = await fetchOlderMessages();
+    chatController.appendMessages(olderMessages);
+  },
+)
+```
+
+## Customization
+
+### Basic Configuration
 
 ```dart
 Chat(
@@ -94,168 +120,50 @@ Chat(
     senderAlignment: ChatAlignment.end,
     bubbleConfiguration: BubbleConfiguration(
       maxWidth: 280,
-      profileBuilder: (context, name) => CustomProfileWidget(name),
-      senderBubbleBuilder: (context, child) => CustomBubble(
-        child: child,
-        color: Colors.blue,
-      ),
-      receiverBubbleBuilder: (context, child) => CustomBubble(
-        child: child,
-        color: Colors.grey[200],
-      ),
-    ),
-    customInputField: (context, controller) => CustomInputField(
-      controller: controller,
+      profileBuilder: (context, name) => CustomProfile(name),
+      senderBubbleBuilder: (context, child) => CustomBubble(child),
     ),
   ),
 )
 ```
 
-### Custom Message Element
+### Custom Message Elements
 
 ```dart
 class ImageElement extends MessageElement {
   final String url;
-  final double? width;
-  final double? height;
-  const ImageElement({required this.url, this.width, this.height});
+  const ImageElement({required this.url});
 
   @override
   Widget toWidget(BuildContext context) {
-    return Image.network(
-      url,width: width, height, height
-    );
-  }
-}
-```
-
-### Message Handling
-
-```dart
-// Adding new messages
-chatController.addMessage(
-  SenderMessage(
-    name: 'You',
-    timestamp: DateTime.now().toIso8601String(),
-    elements: [TextMessageElement(text: 'New message')],
-  ),
-);
-
-// Listening to message dispatch results
-chatController.dispatchResultStream.listen((result) {
-  if (result.isSuccess) {
-    print('Message sent successfully');
-  } else {
-    print('Failed to send message: ${result.exception}');
-  }
-});
-
-// Listening to new received messages
-chatController.newReceiveMessageStream.listen((message) {
-  print('New message received: ${message.id}');
-});
-```
-
-### Read-only Mode
-
-```dart
-Chat(
-  readOnly: true,
-  chatController: chatController,
-  configuration: ChatConfiguration(
-    readOnlyWidget: Container(
-      padding: EdgeInsets.all(16),
-      child: Text('This conversation is read-only'),
-    ),
-  ),
-)
-```
-
-### Infinite Scroll (Load More Messages)
-
-```dart
-class ChatScreen extends StatefulWidget {
-  @override
-  _ChatScreenState createState() => _ChatScreenState();
-}
-
-class _ChatScreenState extends State<ChatScreen> {
-  late ChatController chatController;
-  bool hasMoreMessages = true;
-
-  @override
-  void initState() {
-    super.initState();
-    chatController = ChatController();
-  }
-
-  Future<void> _loadMoreMessages() async {
-    if (!hasMoreMessages) return;
-
-    // Fetch older messages from your API
-    final olderMessages = await _fetchOlderMessages();
-
-    if (olderMessages.isEmpty) {
-      hasMoreMessages = false;
-    } else {
-      chatController.appendMessages(olderMessages);
-    }
-  }
-
-  Future<List<Message>> _fetchOlderMessages() async {
-    // Replace with your actual API call
-    return [
-      ReceiverMessage(
-        id: 'older_msg_1',
-        name: 'Support',
-        timestamp: DateTime.now().subtract(Duration(hours: 2)).toIso8601String(),
-        elements: [TextMessageElement(text: 'Previous message')],
-      ),
-    ];
+    return Image.network(url);
   }
 
   @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      body: Chat(
-        chatController: chatController,
-        onScrollToTop: _loadMoreMessages,
-      ),
-    );
-  }
+  MessageElement copyWith() => ImageElement(url: url);
 }
 ```
 
-## Message Types
-
-### Creating Messages
+### Custom Message Sorting
 
 ```dart
-// Sender message
-final senderMessage = SenderMessage(
-  name: 'User Name',
-  timestamp: DateTime.now().toIso8601String(),
-  elements: [TextMessageElement(text: 'Hello world!')],
-);
-
-// Receiver message
-final receiverMessage = ReceiverMessage(
-  id: 'unique_id',
-  name: 'Other User',
-  timestamp: DateTime.now().toIso8601String(),
-  elements: [TextMessageElement(text: 'Hi there!')],
-);
-
-// Message with loading state
-final loadingMessage = SenderMessage(
-  name: 'User Name',
-  timestamp: DateTime.now().toIso8601String(),
-  elements: [TextMessageElement(text: 'Sending...')],
-  isLoading: true,
+final controller = ChatController(
+  customSortCallback: (message1, message2) {
+    // Custom sorting for messages with identical timestamps
+    return message1.id.compareTo(message2.id);
+  },
 );
 ```
 
 ## Configuration Options
+
+### ChatConfiguration
+
+- `senderAlignment`: Message alignment (start/end)
+- `customInputField`: Custom input field widget
+- `newReceiveMessageNotificationBuilder`: New message notification builder
+- `bubbleConfiguration`: Bubble appearance settings
+- `readOnlyWidget`: Widget for read-only mode
 
 ### BubbleConfiguration
 
@@ -266,13 +174,42 @@ final loadingMessage = SenderMessage(
 - `loadingWidget`: Custom loading indicator
 - `maxWidth`: Maximum bubble width
 
-### ChatConfiguration
+## Message Types
 
-- `senderAlignment`: Message alignment (start/end)
-- `customInputField`: Custom input field widget
-- `newReceiveMessageNotificationBuilder`: New message notification builder
-- `bubbleConfiguration`: Bubble appearance settings
-- `newMessageScrollThreshold`: Scroll threshold for new messages
+```dart
+// Sender message (outgoing)
+SenderMessage(
+  name: 'User Name',
+  timestamp: DateTime.now().toIso8601String(),
+  elements: [TextMessageElement(text: 'Hello world!')],
+);
+
+// Receiver message (incoming)
+ReceiverMessage(
+  id: 'unique_id',
+  name: 'Other User',
+  timestamp: DateTime.now().toIso8601String(),
+  elements: [TextMessageElement(text: 'Hi there!')],
+);
+```
+
+## Event Streams
+
+```dart
+// Listen to dispatch results
+chatController.dispatchResultStream.listen((result) {
+  if (result.isSuccess) {
+    print('Message sent successfully');
+  } else {
+    print('Failed: ${result.exception}');
+  }
+});
+
+// Listen to new received messages
+chatController.newReceiveMessageStream.listen((message) {
+  print('New message: ${message.id}');
+});
+```
 
 ## Requirements
 

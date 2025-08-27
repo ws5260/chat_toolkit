@@ -9,6 +9,16 @@ import 'package:flutter/material.dart';
 /// message or null if the operation failed.
 typedef MessageDispatchCallback = Future<Message?> Function(Message);
 
+/// Custom sort callback for message sorting.
+///
+/// Takes two [Message] objects and returns an integer indicating their
+/// relative order.
+///
+/// The return value should be:
+/// - Less than 0 if [a] should come before [b]
+/// - 0 if [a] and [b] are equal
+typedef CustomSortCallback = int Function(Message a, Message b);
+
 /// Result of a message dispatch operation.
 ///
 /// Contains information about the success status and any exceptions
@@ -93,6 +103,12 @@ class ChatController extends ScrollController {
   /// Whether this controller has been disposed.
   bool get isDisposed => _isDisposed;
 
+  /// Custom sort callback for message sorting.
+  ///
+  /// If provided, this callback will be used to sort messages instead of
+  /// the default sorting logic.
+  final CustomSortCallback? _customSortCallback;
+
   @override
   void notifyListeners() {
     if (_isDisposed) return;
@@ -118,9 +134,23 @@ class ChatController extends ScrollController {
     messages.sort((a, b) {
       final aDate = DateTime.tryParse(a.timestamp);
       final bDate = DateTime.tryParse(b.timestamp);
-      if (aDate == null || bDate == null) return 0;
-      if (aDate.isBefore(bDate)) return -1;
-      return 1;
+
+      if (aDate == null || bDate == null) {
+        if (aDate == null && bDate == null) return 0;
+        if (aDate == null) return 1;
+        return -1;
+      }
+
+      final timeComparison = aDate.compareTo(bDate);
+
+      if (timeComparison != 0) {
+        return timeComparison;
+      }
+
+      if (_customSortCallback != null) {
+        return _customSortCallback(a, b);
+      }
+      return 0;
     });
     for (final message in messages) {
       addMessage(message);
@@ -153,8 +183,8 @@ class ChatController extends ScrollController {
   }
 
   /// Creates a new ChatController.
-  ///
-  ChatController();
+  ChatController({CustomSortCallback? customSortCallback})
+      : _customSortCallback = customSortCallback;
 
   @override
   void dispose() {
