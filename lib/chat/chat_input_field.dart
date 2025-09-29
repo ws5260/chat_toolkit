@@ -30,7 +30,8 @@ class _ChatInputFieldState extends State<ChatInputField> {
       decoration: BoxDecoration(
         color: Colors.white,
         border: Border(
-            top: BorderSide(color: const Color(0xFF000000).withOpacity(0.05))),
+            top: BorderSide(
+                color: const Color(0xFF000000).withValues(alpha: 0.05))),
       ),
       child: Row(
         children: [
@@ -45,7 +46,7 @@ class _ChatInputFieldState extends State<ChatInputField> {
             decoration: InputDecoration(
               hintText: 'Reply...',
               hintStyle: TextStyle(
-                color: const Color(0xFF0D082C).withOpacity(0.6),
+                color: const Color(0xFF0D082C).withValues(alpha: 0.6),
                 fontSize: 16,
                 fontWeight: FontWeight.w400,
               ),

@@ -477,20 +477,3 @@ class ChatController extends ScrollController {
     return false;
   }
 }
-
-// class ChatControllerInhertedWidget extends InheritedWidget {
-//   const ChatControllerInhertedWidget(
-//       {super.key, required super.child, required this.controller});
-//   final ChatController controller;
-
-//   static ChatController of(BuildContext context) {
-//     return context
-//         .dependOnInheritedWidgetOfExactType<ChatControllerInhertedWidget>()!
-//         .controller;
-//   }
-
-//   @override
-//   bool updateShouldNotify(ChatControllerInhertedWidget oldWidget) {
-//     return false;
-//   }
-// }

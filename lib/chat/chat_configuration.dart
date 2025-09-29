@@ -141,7 +141,7 @@ class BubbleConfiguration {
           style: TextStyle(
               fontSize: 14,
               fontWeight: FontWeight.w400,
-              color: const Color(0xFF0D082C).withOpacity(0.4)),
+              color: const Color(0xFF0D082C).withValues(alpha: 0.4)),
         );
   }
 }
@@ -226,15 +226,6 @@ class ChatConfiguration {
   ///
   /// Returns true if sender alignment is set to start.
   bool get isPrevProfile => senderAlignment == ChatAlignment.start;
-
-  /// Builds the input field widget for the chat.
-  ///
-  /// Uses the custom input field if provided, otherwise returns
-  /// the default ChatInputField.
-  Widget buildInputField(BuildContext context, ChatController controller) {
-    return customInputField?.call(context, controller) ??
-        const ChatInputField();
-  }
 
   /// Builds a date divider widget for the given timestamp.
   ///

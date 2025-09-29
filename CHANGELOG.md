@@ -88,3 +88,10 @@ fix: Add missing filename configuration for web platform
 ### Fix
 
 - Add loading message sorting to message prioritization logic
+
+## 1.3.4
+
+### Fix
+
+- Remove default input field and add custom input field parameter to Chat widget
+- Update withOpacity to withValues

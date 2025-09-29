@@ -45,7 +45,8 @@ class Chat extends StatefulWidget {
       this.readOnly = false,
       this.chatController,
       this.configuration = const ChatConfiguration(),
-      this.onScrollToTop});
+      this.onScrollToTop,
+      this.customInputField});
 
   /// Whether the chat is in read-only mode.
   ///
@@ -67,6 +68,12 @@ class Chat extends StatefulWidget {
   ///
   /// This is typically used to load older messages in a paginated fashion.
   final Future<void> Function()? onScrollToTop;
+
+  /// Custom input field widget.
+  ///
+  /// Receives the chat controller to handle message sending.
+
+  final Widget Function(BuildContext, ChatController)? customInputField;
 
   @override
   State<Chat> createState() => _ChatState();
@@ -120,7 +127,7 @@ class _ChatState extends State<Chat> {
     }
     if (_debounceTimer?.isActive ?? false) return;
 
-    // 새로운 디바운스 타이머 시작
+    // new debounce timer for scroll to top
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (chatController.position.pixels >=
           chatController.position.maxScrollExtent - 20) {
@@ -225,7 +232,7 @@ class _ChatState extends State<Chat> {
     for (int index = 0; index < messageGroups.length; index++) {
       final group = messageGroups[index];
 
-      // 첫 번째 그룹이거나 날짜가 변경된 경우 날짜 구분선 추가
+      // add date separator if first group or date changed
       if (index == 0 ||
           (index > 0 &&
               chatController.isDateChangedComparedTo(
@@ -234,11 +241,11 @@ class _ChatState extends State<Chat> {
         widgets.add(widget.configuration
             .buildDateDivider(context, group.messages.first.timestamp));
       } else {
-        // 날짜 구분선이 없는 경우 일반 간격 추가
+        // add normal gap if date separator is not exists
         widgets.add(const Gap(24));
       }
 
-      // 메시지 그룹 위젯 생성
+      // create message group widget
       bool isPrevProfile = (group.isSender &&
               widget.configuration.senderAlignment == ChatAlignment.start) ||
           (!group.isSender &&
@@ -305,6 +312,7 @@ class _ChatState extends State<Chat> {
             ),
           );
     }
-    return widget.configuration.buildInputField(context, chatController);
+    return widget.customInputField?.call(context, chatController) ??
+        const SizedBox.shrink();
   }
 }
