@@ -1,5 +1,4 @@
 import 'package:chat_toolkit/chat/chat_controller.dart';
-import 'package:chat_toolkit/chat/chat_input_field.dart';
 import 'package:chat_toolkit/chat/message/entity/message.dart';
 import 'package:chat_toolkit/chat/message/message_loading.dart';
 import 'package:flutter/material.dart';

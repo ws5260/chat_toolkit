@@ -21,3 +21,4 @@ export 'chat/chat_controller.dart';
 export 'chat/message/entity/message.dart';
 export 'chat/message/entity/message_group.dart';
 export 'chat/message/message_bubble.dart';
+export 'chat/message/elements/message_element.dart';
