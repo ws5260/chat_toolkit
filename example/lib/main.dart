@@ -1,3 +1,4 @@
+import 'package:chat_toolkit/chat/message/elements/message_element.dart';
 import 'package:flutter/material.dart';
 import 'package:chat_toolkit/chat_toolkit.dart';
 
@@ -229,52 +230,7 @@ class _ChatScreenState extends State<ChatScreen> {
                       ),
                     );
                   },
-                  profileBuilder: (context, name) {
-                    return CircleAvatar(
-                      radius: 20,
-                      backgroundColor: Colors.grey[300],
-                      child: Text(
-                        name[0],
-                        style: const TextStyle(
-                          fontWeight: FontWeight.bold,
-                          color: Colors.black54,
-                        ),
-                      ),
-                    );
-                  },
                 ),
-                customInputField: (context, controller) {
-                  return Container(
-                    padding: const EdgeInsets.all(16),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: TextField(
-                            controller: textController,
-                            decoration: const InputDecoration(
-                              hintText: '메시지를 입력하세요...',
-                              border: OutlineInputBorder(),
-                              contentPadding: EdgeInsets.symmetric(
-                                horizontal: 16,
-                                vertical: 12,
-                              ),
-                            ),
-                            onSubmitted: (_) => _sendMessage(),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        IconButton(
-                          onPressed: _sendMessage,
-                          icon: const Icon(Icons.send),
-                          style: IconButton.styleFrom(
-                            backgroundColor: Colors.blue,
-                            foregroundColor: Colors.white,
-                          ),
-                        ),
-                      ],
-                    ),
-                  );
-                },
               ),
             ),
           ),

@@ -1,80 +1,30 @@
 import 'dart:async';
 import 'dart:ui';
 
-import 'package:chat_toolkit/chat/chat_configuration.dart';
-import 'package:chat_toolkit/chat/chat_controller.dart';
-import 'package:chat_toolkit/chat/message/entity/message.dart';
-import 'package:chat_toolkit/chat/message/message_bubble.dart';
-import 'package:chat_toolkit/chat/size_detected_widget.dart';
 import 'package:flutter/material.dart';
 import 'package:gap/gap.dart';
 
-/// A customizable chat widget that provides a complete chat interface.
-///
-/// This widget follows Clean Architecture principles by separating concerns:
-/// - UI presentation (this widget)
-/// - Business logic ([ChatController])
-/// - Configuration ([ChatConfiguration])
-///
-/// The widget supports:
-/// - Message display with grouping
-/// - Custom message bubbles and input fields
-/// - Scroll behavior and new message notifications
-/// - Read-only mode
-///
-/// Example usage:
-/// ```dart
-/// Chat(
-///   chatController: ChatController(),
-///   configuration: ChatConfiguration(
-///     senderAlignment: ChatAlignment.end,
-///   ),
-///   onScrollToTop: () async {
-///     // Load more messages
-///   },
-/// )
-/// ```
+import 'chat_configuration.dart';
+import 'chat_controller.dart';
+import 'message/entity/message.dart';
+import 'message/entity/message_group.dart';
+import 'message/message_bubble.dart';
+import 'size_detected_widget.dart';
+
 class Chat extends StatefulWidget {
-  /// Creates a new Chat widget.
-  ///
-  /// The [configuration] parameter allows customization of the chat appearance
-  /// and behavior. If [chatController] is not provided, a default controller
-  /// will be created.
-  const Chat(
-      {super.key,
-      this.readOnly = false,
-      this.chatController,
-      this.configuration = const ChatConfiguration(),
-      this.onScrollToTop,
-      this.customInputField});
-
-  /// Whether the chat is in read-only mode.
-  ///
-  /// When true, the input field is replaced with a read-only banner.
+  const Chat({
+    super.key,
+    this.readOnly = false,
+    this.chatController,
+    this.configuration = const ChatConfiguration(),
+    this.onScrollToTop,
+    this.customInputField,
+  });
   final bool readOnly;
-
-  /// The controller that manages chat state and behavior.
-  ///
-  /// If not provided, a default [ChatController] will be created.
   final ChatController? chatController;
-
-  /// Configuration object that defines the chat's appearance and behavior.
-  ///
-  /// This follows the Dependency Injection principle by allowing
-  /// external configuration of the widget's behavior.
   final ChatConfiguration configuration;
-
-  /// Callback function called when the user scrolls to the top.
-  ///
-  /// This is typically used to load older messages in a paginated fashion.
-  final Future<void> Function()? onScrollToTop;
-
-  /// Custom input field widget.
-  ///
-  /// Receives the chat controller to handle message sending.
-
   final Widget Function(BuildContext, ChatController)? customInputField;
-
+  final Future<void> Function()? onScrollToTop;
   @override
   State<Chat> createState() => _ChatState();
 }
@@ -95,7 +45,8 @@ class _ChatState extends State<Chat> {
       chatController.newReceiveMessageStream.listen((message) {
         _isScrollable = true;
         if (chatController.isAtBottom(
-            threshold: widget.configuration.newMessageScrollThreshold)) {
+          threshold: widget.configuration.newMessageScrollThreshold,
+        )) {
           showNewReceiveMessageIndicator.value = null;
           chatController.scrollToBottom();
         } else {
@@ -119,7 +70,8 @@ class _ChatState extends State<Chat> {
     if (widget.configuration.newReceiveMessageNotificationBuilder != null &&
         _isScrollable) {
       if (chatController.isAtBottom(
-          threshold: widget.configuration.newMessageScrollThreshold)) {
+        threshold: widget.configuration.newMessageScrollThreshold,
+      )) {
         chatController.scrollToBottom();
         showNewReceiveMessageIndicator.value = null;
         _isScrollable = false;
@@ -127,7 +79,7 @@ class _ChatState extends State<Chat> {
     }
     if (_debounceTimer?.isActive ?? false) return;
 
-    // new debounce timer for scroll to top
+    // 새로운 디바운스 타이머 시작
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (chatController.position.pixels >=
           chatController.position.maxScrollExtent - 20) {
@@ -154,27 +106,31 @@ class _ChatState extends State<Chat> {
     return Column(
       children: [
         Expanded(
-            child: Stack(
-          children: [
-            _buildMessageList(),
-            if (widget.configuration.newReceiveMessageNotificationBuilder !=
-                null) ...[
-              Align(
-                alignment: Alignment.bottomCenter,
-                child: ValueListenableBuilder(
-                  valueListenable: showNewReceiveMessageIndicator,
-                  builder: (context, value, child) {
-                    return value == null
-                        ? const SizedBox.shrink()
-                        : widget.configuration
-                                .newReceiveMessageNotificationBuilder!(
-                            context, value);
-                  },
+          child: Stack(
+            children: [
+              _buildMessageList(),
+              if (widget.configuration.newReceiveMessageNotificationBuilder !=
+                  null) ...[
+                Align(
+                  alignment: Alignment.bottomCenter,
+                  child: ValueListenableBuilder(
+                    valueListenable: showNewReceiveMessageIndicator,
+                    builder: (context, value, child) {
+                      return value == null
+                          ? const SizedBox.shrink()
+                          : widget.configuration
+                              .newReceiveMessageNotificationBuilder!(
+                              context,
+                              value,
+                              chatController,
+                            );
+                    },
+                  ),
                 ),
-              ),
+              ],
             ],
-          ],
-        )),
+          ),
+        ),
         _buildInputOrBanner(),
       ],
     );
@@ -185,13 +141,15 @@ class _ChatState extends State<Chat> {
       type: SizeDetectedWidgetType.height,
       onChange: _onSizeChanged,
       child: CustomScrollView(
-        scrollBehavior:
-            const ScrollBehavior().copyWith(scrollbars: false, dragDevices: {
-          PointerDeviceKind.touch,
-          PointerDeviceKind.mouse,
-          PointerDeviceKind.stylus,
-          PointerDeviceKind.trackpad,
-        }),
+        reverse: chatController.reverse,
+        scrollBehavior: const ScrollBehavior().copyWith(
+          scrollbars: false,
+          dragDevices: {
+            PointerDeviceKind.touch,
+            PointerDeviceKind.stylus,
+            PointerDeviceKind.trackpad,
+          },
+        ),
         controller: chatController,
         slivers: [
           const SliverGap(30),
@@ -210,7 +168,9 @@ class _ChatState extends State<Chat> {
 
     List<Widget> widgets = _buildMessageWidgetList(context, messageGroups);
 
-    widgets = widgets.reversed.toList();
+    if (chatController.reverse) {
+      widgets = widgets.reversed.toList();
+    }
 
     return SliverPadding(
       padding: const EdgeInsets.symmetric(horizontal: 30),
@@ -224,7 +184,9 @@ class _ChatState extends State<Chat> {
   }
 
   List<Widget> _buildMessageWidgetList(
-      BuildContext context, List<MessageGroup> messageGroups) {
+    BuildContext context,
+    List<MessageGroup> messageGroups,
+  ) {
     if (messageGroups.isEmpty) return [];
 
     final List<Widget> widgets = [];
@@ -232,33 +194,40 @@ class _ChatState extends State<Chat> {
     for (int index = 0; index < messageGroups.length; index++) {
       final group = messageGroups[index];
 
-      // add date separator if first group or date changed
+      // 첫 번째 그룹이거나 날짜가 변경된 경우 날짜 구분선 추가
       if (index == 0 ||
           (index > 0 &&
               chatController.isDateChangedComparedTo(
-                  messageGroups[index - 1].messages.first,
-                  messageGroups[index].messages.first))) {
-        widgets.add(widget.configuration
-            .buildDateDivider(context, group.messages.first.timestamp));
+                messageGroups[index - 1].messages.first,
+                messageGroups[index].messages.first,
+              ))) {
+        widgets.add(
+          widget.configuration.buildDateDivider(
+            context,
+            group.messages.first.timestamp,
+          ),
+        );
       } else {
-        // add normal gap if date separator is not exists
+        // 날짜 구분선이 없는 경우 일반 간격 추가
         widgets.add(const Gap(24));
       }
 
-      // create message group widget
+      // 메시지 그룹 위젯 생성
       bool isPrevProfile = (group.isSender &&
               widget.configuration.senderAlignment == ChatAlignment.start) ||
           (!group.isSender &&
               widget.configuration.senderAlignment == ChatAlignment.end);
 
-      widgets.add(SelectionArea(
-        selectionControls: MaterialTextSelectionControls(),
-        child: Row(
+      widgets.add(
+        Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             if (isPrevProfile) ...[
-              widget.configuration.bubbleConfiguration
-                  .buildProfile(context, group.name),
+              widget.configuration.bubbleConfiguration.buildProfile(
+                context,
+                group.name,
+                group.isSender,
+              ),
               const Gap(12),
             ],
             Expanded(
@@ -270,25 +239,30 @@ class _ChatState extends State<Chat> {
                       configuration: widget.configuration,
                       onDelete: () {
                         chatController.removeMessageFromGroup(
-                            group, group.messages[i]);
+                          group,
+                          group.messages[i],
+                        );
                       },
                       onRetry: () {
                         chatController.retryMessage(group.messages[i]);
                       },
                     ),
-                    if (i < group.messages.length - 1) const Gap(8)
-                  ]
+                    if (i < group.messages.length - 1) const Gap(8),
+                  ],
                 ],
               ),
             ),
             if (!isPrevProfile) ...[
               const Gap(12),
-              widget.configuration.bubbleConfiguration
-                  .buildProfile(context, group.name),
+              widget.configuration.bubbleConfiguration.buildProfile(
+                context,
+                group.name,
+                group.isSender,
+              ),
             ],
           ],
         ),
-      ));
+      );
     }
 
     return widgets;
@@ -300,15 +274,17 @@ class _ChatState extends State<Chat> {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(99),
-                color: const Color(0xFFF4F4F4)),
+              borderRadius: BorderRadius.circular(99),
+              color: const Color(0xFFF4F4F4),
+            ),
             child: const Text(
-              "Read Only",
+              "current chat is not mine",
               style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w400,
-                  color: Color(0xFF151515),
-                  letterSpacing: -0.02),
+                fontSize: 12,
+                fontWeight: FontWeight.w400,
+                color: Color(0xFF151515),
+                letterSpacing: -0.02,
+              ),
             ),
           );
     }

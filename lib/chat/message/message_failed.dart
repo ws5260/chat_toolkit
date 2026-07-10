@@ -8,6 +8,14 @@ class MessageFailed extends StatelessWidget {
   });
   final Function()? onDelete;
   final Function()? onRetry;
+
+  Widget _buildIcon(IconData icon, VoidCallback? onTap) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Icon(icon, color: Colors.white),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -19,21 +27,13 @@ class MessageFailed extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          GestureDetector(
-            onTap: onDelete,
-            child: const Icon(Icons.delete),
-          ),
+          _buildIcon(Icons.delete, onDelete),
           const SizedBox(
             width: 14,
             height: 20,
-            child: VerticalDivider(
-              color: Color(0x99FFFFFF),
-            ),
+            child: VerticalDivider(color: Color(0x99FFFFFF)),
           ),
-          GestureDetector(
-            onTap: onRetry,
-            child: const Icon(Icons.refresh),
-          ),
+          _buildIcon(Icons.refresh, onRetry),
         ],
       ),
     );

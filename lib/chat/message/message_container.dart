@@ -1,8 +1,9 @@
-import 'package:chat_toolkit/chat/message/entity/message.dart';
-import 'package:chat_toolkit/chat/message/message_failed.dart';
-import 'package:chat_toolkit/chat/message/message_loading.dart';
 import 'package:flutter/material.dart';
 import 'package:gap/gap.dart';
+
+import 'entity/message.dart';
+import 'message_failed.dart';
+import 'message_loading.dart';
 
 class MessageContainer extends StatelessWidget {
   const MessageContainer({
@@ -14,6 +15,7 @@ class MessageContainer extends StatelessWidget {
     required this.isSender,
     required this.maxWidth,
     this.loadingWidget = const MessageLoading(),
+    this.readIndicatorBuilder,
     this.onDelete,
     this.onRetry,
   });
@@ -24,6 +26,8 @@ class MessageContainer extends StatelessWidget {
   final Widget Function(BuildContext context, Widget child, bool isSender)
       bubbleBuilder;
   final Widget Function(BuildContext context, String timestamp) timeBuilder;
+  final Widget Function(BuildContext context, bool isRead)?
+      readIndicatorBuilder;
   final VoidCallback? onDelete;
   final VoidCallback? onRetry;
   final Widget loadingWidget;
@@ -32,22 +36,28 @@ class MessageContainer extends StatelessWidget {
   Widget build(BuildContext context) {
     Widget trailWidget = const SizedBox.shrink();
     if (message is SenderMessage && (message as SenderMessage).isFailed) {
-      trailWidget = MessageFailed(
-        onDelete: onDelete,
-        onRetry: onRetry,
-      );
+      trailWidget = MessageFailed(onDelete: onDelete, onRetry: onRetry);
     } else if (!message.isLoading) {
-      trailWidget = timeBuilder(context, message.timestamp);
+      if (message.isRead != null && readIndicatorBuilder != null) {
+        trailWidget = Column(
+          crossAxisAlignment: isBaseAxisStart
+              ? CrossAxisAlignment.start
+              : CrossAxisAlignment.end,
+          children: [
+            readIndicatorBuilder!(context, message.isRead!),
+            timeBuilder(context, message.timestamp),
+          ],
+        );
+      } else {
+        trailWidget = timeBuilder(context, message.timestamp);
+      }
     }
     return Row(
       mainAxisAlignment:
           isBaseAxisStart ? MainAxisAlignment.start : MainAxisAlignment.end,
       crossAxisAlignment: CrossAxisAlignment.end,
       children: [
-        if (!isBaseAxisStart) ...[
-          trailWidget,
-          const Gap(12),
-        ],
+        if (!isBaseAxisStart) ...[trailWidget, const Gap(12)],
         Flexible(
           fit: FlexFit.loose,
           child: bubbleBuilder(
@@ -64,15 +74,15 @@ class MessageContainer extends StatelessWidget {
                     for (int i = 0; i < message.elements.length; i++) ...[
                       message.elements[i].toWidget(context),
                       if (i != message.elements.length - 1) const Gap(10),
-                    ]
-                  ]
+                    ],
+                  ],
                 ],
               ),
             ),
             isSender,
           ),
         ),
-        if (isBaseAxisStart) ...[const Gap(12), trailWidget]
+        if (isBaseAxisStart) ...[const Gap(12), trailWidget],
       ],
     );
   }
