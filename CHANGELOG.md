@@ -115,3 +115,9 @@ fix: Add missing filename configuration for web platform
 ### Removed
 
 - Removed unnecessary comments and redundant code.
+
+## 1.3.6
+
+### Changed
+
+- `intl` package upgrade
