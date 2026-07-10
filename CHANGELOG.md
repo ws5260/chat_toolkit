@@ -95,3 +95,23 @@ fix: Add missing filename configuration for web platform
 
 - Remove default input field and add custom input field parameter to Chat widget
 - Update withOpacity to withValues
+
+
+## 1.3.5
+
+### Added
+
+- Added separate sender and receiver profile builders to `BubbleConfiguration`.
+- Added customizable read indicators for message bubbles.
+- Added methods for managing message read states and updating message visibility.
+
+### Changed
+
+- Simplified message dispatch logic in `ChatController`.
+- Improved unread message handling.
+- Streamlined message grouping and sorting for better performance.
+- Improved code readability across multiple files.
+
+### Removed
+
+- Removed unnecessary comments and redundant code.
