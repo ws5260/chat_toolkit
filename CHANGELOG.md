@@ -126,9 +126,8 @@ fix: Add missing filename configuration for web platform
 
 ### Performance
 
-- **Scroll performance**: Scrolling no longer rebuilds the whole message list. In a 300-message room, jank frames dropped from 11–79% to 0–4%, and build p90 from 11.6–21.6ms to 4.7–6.3ms.
-  - Added `ChatController.messagesRevision` (`ValueListenable<int>`), which only changes when the message list changes. The list listens to it instead of the controller, which notifies on every scroll offset change. `notifyListeners()` is still called, so existing controller listeners behave as before.
-  - Message groups are built lazily with `SliverChildBuilderDelegate`, so only groups entering the viewport are built. Each group is keyed by `ObjectKey(group)` with `findChildIndexCallback`, so existing items are reused when new messages shift indices.
+- Scrolling no longer rebuilds the whole message list; only message groups entering the viewport are built. In a 300-message room, janky frames dropped from 11–79% to 0–4%, and build time (p90) from 11.6–21.6ms to 4.7–6.3ms.
+- Added `ChatController.messagesRevision` (`ValueListenable<int>`), which changes only when the message list changes. `Chat` listens to it instead of the controller, which notifies on every scroll offset change. `notifyListeners()` is still called, so existing controller listeners behave as before.
 
 ### Added
 
@@ -148,7 +147,6 @@ fix: Add missing filename configuration for web platform
 - Sending a message (`isSender`) scrolls to the bottom.
 - Failed bubble UI: the retry icon now comes first and the delete icon is now an X; sizes follow the new design spec.
 - Minimum Dart SDK raised to `^3.12.0`.
-- Translated Korean code comments to English and added missing documentation.
 
 ### Fix
 
@@ -161,9 +159,8 @@ fix: Add missing filename configuration for web platform
 
 ### 성능 개선
 
-- **스크롤 성능**: 스크롤할 때 메시지 목록 전체를 다시 만들지 않습니다. 메시지 300개 기준 끊긴 프레임 비율이 11~79%에서 0~4%로, build p90이 11.6~21.6ms에서 4.7~6.3ms로 줄었습니다.
-  - 메시지 목록이 바뀔 때만 값이 바뀌는 `ChatController.messagesRevision`(`ValueListenable<int>`)을 추가했습니다. 스크롤 위치가 바뀔 때마다 알림을 보내는 컨트롤러 대신 이 값을 구독합니다. `notifyListeners()`는 그대로 호출하므로 기존 컨트롤러 리스너 동작은 같습니다.
-  - 메시지 묶음을 `SliverChildBuilderDelegate`로 필요할 때만 만듭니다. 화면에 들어오는 묶음만 만들고, `ObjectKey(묶음)`과 `findChildIndexCallback`으로 새 메시지가 붙어 index가 밀려도 기존 항목을 다시 씁니다.
+- 스크롤할 때 메시지 목록 전체를 다시 만들지 않고, 화면에 보이는 메시지 묶음만 만듭니다. 메시지 300개 기준으로 끊기는 프레임이 11~79%에서 0~4%로, build 시간(p90)이 11.6~21.6ms에서 4.7~6.3ms로 줄었습니다.
+- `ChatController.messagesRevision`(`ValueListenable<int>`)을 추가했습니다. 메시지 목록이 바뀔 때만 값이 바뀌며, `Chat`은 스크롤할 때마다 알림을 보내는 컨트롤러 대신 이 값을 구독합니다. `notifyListeners()`는 그대로 호출하므로 기존 컨트롤러 리스너 동작은 같습니다.
 
 ### 추가
 
@@ -183,7 +180,6 @@ fix: Add missing filename configuration for web platform
 - 메시지를 보내면(`isSender`) 맨 아래로 스크롤합니다.
 - 실패 말풍선 UI: 재전송 아이콘이 앞으로 오고 삭제 아이콘은 X로 바뀌었으며, 크기는 새 시안을 따릅니다.
 - 최소 Dart SDK를 `^3.12.0`으로 올렸습니다.
-- 한글 코드 주석을 영어로 바꾸고 부족한 설명을 보강했습니다.
 
 ### 수정
 
