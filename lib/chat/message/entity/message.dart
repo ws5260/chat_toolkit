@@ -1,9 +1,9 @@
-import 'package:uuid/uuid.dart';
-
 import '../elements/message_element.dart';
+import 'package:uuid/uuid.dart';
 
 abstract class Message {
   final String id;
+  final String? serverUuid;
   final String timestamp;
   final String name;
 
@@ -16,6 +16,7 @@ abstract class Message {
   Message({
     required this.name,
     required this.id,
+    this.serverUuid,
     required this.timestamp,
     required this.elements,
     this.isLoading = false,
@@ -44,6 +45,7 @@ class ReceiverMessage extends Message {
     required super.elements,
     super.isLoading,
     required super.id,
+    super.serverUuid,
     super.width,
     super.isRead,
   });
@@ -64,6 +66,7 @@ class ReceiverMessage extends Message {
       elements: elements ?? this.elements,
       isLoading: isLoading ?? this.isLoading,
       id: id ?? this.id,
+      serverUuid: serverUuid,
       width: width ?? this.width,
       isRead: isRead ?? this.isRead,
     );
@@ -80,6 +83,7 @@ class SenderMessage extends Message {
     super.isFailed,
     super.isRead,
     String? id,
+    super.serverUuid,
     super.width,
   }) : super(id: id ?? const Uuid().v4());
 
@@ -95,6 +99,7 @@ class SenderMessage extends Message {
   }) {
     return SenderMessage(
       id: id ?? this.id,
+      serverUuid: serverUuid,
       timestamp: timestamp ?? this.timestamp,
       elements: elements ?? this.elements,
       isLoading: isLoading ?? this.isLoading,

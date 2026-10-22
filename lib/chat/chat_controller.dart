@@ -1,7 +1,7 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-
 import 'message/entity/failed_message_entry.dart';
 import 'message/entity/message.dart';
 import 'message/entity/message_group.dart';
@@ -9,16 +9,27 @@ import 'message/entity/message_group.dart';
 typedef MessageDispatchCallback = Future<Message?> Function(Message);
 typedef CustomSortCallback = int Function(Message a, Message b);
 
+/// Thrown by a dispatch callback when the server refuses to send the message.
+class MessageBlockedException implements Exception {
+  /// The resultCode of the server's [ResponseCode].
+  final String code;
+
+  /// Text to show the agent, used as-is from the server (already localized).
+  final String message;
+
+  MessageBlockedException({required this.code, required this.message});
+
+  @override
+  String toString() => 'MessageBlockedException($code)';
+}
+
 class MessageDispatchResult {
   final Message message;
   final bool isSuccess;
   final Exception? exception;
 
-  MessageDispatchResult({
-    required this.message,
-    required this.isSuccess,
-    this.exception,
-  });
+  MessageDispatchResult(
+      {required this.message, required this.isSuccess, this.exception});
 }
 
 class ChatController extends ScrollController {
@@ -51,13 +62,28 @@ class ChatController extends ScrollController {
 
   bool get isDisposed => _isDisposed;
 
-  // 커스텀 정렬 관련 필드들
+  // Tie-breaker for messages that share the same timestamp.
   final CustomSortCallback? _customSortCallback;
 
   @override
   void notifyListeners() {
     if (_isDisposed) return;
     super.notifyListeners();
+  }
+
+  /// Incremented only when the message list changes.
+  /// ScrollController calls notifyListeners on every scroll offset change, so the list
+  /// view should listen to this instead of the controller; otherwise the whole list
+  /// is rebuilt on every scroll frame.
+  ValueListenable<int> get messagesRevision => _messagesRevision;
+  final ValueNotifier<int> _messagesRevision = ValueNotifier(0);
+
+  // Also calls notifyListeners because direct controller listeners (e.g. Chat._onScroll)
+  // have always been notified of message changes.
+  void _notifyMessagesChanged() {
+    if (_isDisposed) return;
+    _messagesRevision.value++;
+    notifyListeners();
   }
 
   void setIsCollapsed(bool value) {
@@ -72,22 +98,22 @@ class ChatController extends ScrollController {
       final aDate = DateTime.tryParse(a.timestamp);
       final bDate = DateTime.tryParse(b.timestamp);
 
-      // 날짜 파싱이 실패한 경우 처리
+      // Messages with unparsable timestamps sort last.
       if (aDate == null || bDate == null) {
         if (aDate == null && bDate == null) return 0;
         if (aDate == null) return 1;
         return -1;
       }
 
-      // 시간 비교
+      // Compare by time first.
       final timeComparison = aDate.compareTo(bDate);
 
-      // 시간이 다르면 시간 순으로 정렬
+      // Different times: chronological order wins.
       if (timeComparison != 0) {
         return timeComparison;
       }
 
-      // 시간이 같은 경우 커스텀 정렬 적용
+      // Same time: defer to the custom sort, if any.
       if (_customSortCallback != null) {
         return _customSortCallback(a, b);
       }
@@ -103,6 +129,17 @@ class ChatController extends ScrollController {
     for (final message in messages) {
       if (message.isRead != null && message.isRead == false) {
         _unreadMessageIds.add(message.id);
+      }
+      if (_messageGroups.isEmpty) {
+        _messageGroups.add(
+          MessageGroup(
+            name: message.name,
+            isSender: message.isSender,
+            timestamp: message.timestamp,
+            messages: [message],
+          ),
+        );
+        continue;
       }
       if (_messageGroups.first.isSender == message.isSender &&
           isSameMinute(
@@ -122,11 +159,10 @@ class ChatController extends ScrollController {
         );
       }
     }
-    notifyListeners();
+    _notifyMessagesChanged();
   }
 
-  ChatController({bool reverse = false, CustomSortCallback? customSortCallback})
-      : _customSortCallback = customSortCallback {
+  ChatController({bool reverse = false, this._customSortCallback}) {
     _reverse = reverse;
   }
 
@@ -137,56 +173,57 @@ class ChatController extends ScrollController {
     _unreadMessageIds.clear();
     _dispatchResultController.close();
     _newReceiveMessageController.close();
+    _messagesRevision.dispose();
     super.dispose();
   }
 
-  void scrollToBottom() async {
-    double getMovePosition() {
-      if (reverse) {
-        return 0.0;
-      } else {
-        return position.maxScrollExtent;
-      }
-    }
+  static const double _bottomEpsilon = 2.0;
 
-    if (hasClients) {
-      double movePosition = getMovePosition();
-      jumpTo(movePosition);
-      WidgetsBinding.instance.addPostFrameCallback((_) async {
-        movePosition = getMovePosition();
-        animateTo(
-          movePosition,
-          duration: const Duration(milliseconds: 50),
-          curve: Curves.easeInOut,
-        );
-      });
-    }
+  void scrollToBottom() {
+    if (_isDisposed || !hasClients) return;
+    final target = reverse ? 0.0 : position.maxScrollExtent;
+    if ((position.pixels - target).abs() <= _bottomEpsilon) return;
+    jumpTo(target);
   }
 
+  /// Scrolls toward older messages by [offset].
   void scrollToTopByValue(double offset) {
-    if (hasClients) {
-      final currentOffset = position.pixels;
-      if (currentOffset < 10) return;
-      jumpTo(currentOffset + offset);
-    }
-  }
-
-  void scrollToBottomByValue(double offset) {
-    if (hasClients) {
-      final currentOffset = position.pixels;
-      if (currentOffset <= 0) return;
+    if (!hasClients) return;
+    final currentOffset = position.pixels;
+    if (reverse) {
       if (currentOffset >= position.maxScrollExtent) return;
+      jumpTo(currentOffset + offset);
+    } else {
+      if (currentOffset <= 0) return;
       jumpTo(currentOffset - offset);
     }
   }
 
+  /// Scrolls toward newer messages by [offset]. Offset direction is the opposite of [scrollToTopByValue].
+  void scrollToBottomByValue(double offset) {
+    if (!hasClients) return;
+    final currentOffset = position.pixels;
+    if (reverse) {
+      if (currentOffset <= 0) return;
+      jumpTo(currentOffset - offset);
+    } else {
+      if (currentOffset >= position.maxScrollExtent) return;
+      jumpTo(currentOffset + offset);
+    }
+  }
+
+  /// Adds [message] to its group. A message whose id already exists is not added again.
   MessageGroup addMessage(Message message) {
-    // _messages.add(message);
-    // _messages.sort((a, b) {
-    //   if (a.isFailed == b.isFailed) return 0;
-    //   if (a.isFailed) return 1;
-    //   return -1;
-    // });
+    if (message.id.isNotEmpty) {
+      final existing = _groupOf(message.id);
+      if (existing != null) {
+        final index = existing.messages.indexWhere((m) => m.id == message.id);
+        existing.messages[index] = message;
+        _notifyMessagesChanged();
+        return existing;
+      }
+    }
+    // _messages.add(message); _messages.sort((a, b) { if (a.isFailed == b.isFailed) return 0; if (a.is…
     late final MessageGroup messageGroup;
     if (_messageGroups.isEmpty ||
         _messageGroups.last.isSender != message.isSender ||
@@ -207,8 +244,10 @@ class ChatController extends ScrollController {
     }
 
     if (_failedMessageEntries.containsKey(message.id)) {
-      _failedMessageEntries[message.id] = _failedMessageEntries[message.id]!
-          .copyWith(messageGroup: messageGroup);
+      _failedMessageEntries[message.id] =
+          _failedMessageEntries[message.id]!.copyWith(
+        messageGroup: messageGroup,
+      );
     }
 
     if (_failedMessageEntries.isNotEmpty) {
@@ -216,9 +255,8 @@ class ChatController extends ScrollController {
 
       for (final failedId in failedIds) {
         final entry = _failedMessageEntries[failedId]!;
-        final failedMessage = entry.messageGroup.messages.firstWhere(
-          (m) => m.id == failedId,
-        );
+        final failedMessage =
+            entry.messageGroup.messages.firstWhere((m) => m.id == failedId);
 
         entry.messageGroup.messages.remove(failedMessage);
         if (entry.messageGroup.messages.isEmpty) {
@@ -238,9 +276,8 @@ class ChatController extends ScrollController {
           );
           _messageGroups.add(newGroup);
         }
-        _failedMessageEntries[failedId] = entry.copyWith(
-          messageGroup: newGroup,
-        );
+        _failedMessageEntries[failedId] =
+            entry.copyWith(messageGroup: newGroup);
       }
     }
     if (message.isRead == false) {
@@ -248,7 +285,7 @@ class ChatController extends ScrollController {
     } else if (message.isRead == true) {
       _unreadMessageIds.remove(message.id);
     }
-    notifyListeners();
+    _notifyMessagesChanged();
     return messageGroup;
   }
 
@@ -256,24 +293,33 @@ class ChatController extends ScrollController {
     Message message, {
     required MessageDispatchCallback onDispatch,
   }) async {
-    final messageGroup = addMessage(
-      message.copyWith(isLoading: true, isFailed: false),
-    );
+    final messageGroup =
+        addMessage(message.copyWith(isLoading: true, isFailed: false));
     late final MessageDispatchResult dispatchResult;
     late final Message? result;
 
-    result = await onDispatch(message);
-    final index = messageGroup.messages.indexWhere(
-      (element) => element.id == message.id,
-    );
+    try {
+      result = await onDispatch(message);
+    } on MessageBlockedException catch (e) {
+      // A block is not a failure: remove the bubble and do not register a retry entry.
+      final blockedIndex = messageGroup.messages
+          .indexWhere((element) => element.id == message.id);
+      if (blockedIndex >= 0) {
+        removeMessageGroupAt(messageGroup, blockedIndex);
+      }
+      final blockedResult = MessageDispatchResult(
+          message: message, isSuccess: false, exception: e);
+      _dispatchResultController.add(blockedResult);
+      _notifyMessagesChanged();
+      return blockedResult;
+    }
+    final index =
+        messageGroup.messages.indexWhere((element) => element.id == message.id);
     if (result != null) {
       messageGroup.messages[index] = result;
       messageGroup.sortMessages();
       dispatchResult = MessageDispatchResult(
-        message: message,
-        isSuccess: true,
-        exception: null,
-      );
+          message: message, isSuccess: true, exception: null);
       if (!result.isSender) {
         _newReceiveMessageController.add(result);
       }
@@ -282,7 +328,7 @@ class ChatController extends ScrollController {
       } else if (result.isRead == false) {
         _unreadMessageIds.add(result.id);
       }
-      notifyListeners();
+      _notifyMessagesChanged();
     } else {
       dispatchResult = MessageDispatchResult(
         message: message,
@@ -299,10 +345,29 @@ class ChatController extends ScrollController {
 
       addMessage(message.copyWith(isLoading: false, isFailed: true));
     }
+    if (message.isSender) {
+      scrollToBottom();
+    }
     if (_dispatchResultController.isClosed) return dispatchResult;
     _dispatchResultController.add(dispatchResult);
 
     return dispatchResult;
+  }
+
+  // Registers a failed message loaded from history as retryable via [onDispatch].
+  void registerFailedMessage(
+      String messageId, MessageDispatchCallback onDispatch) {
+    for (final group in _messageGroups) {
+      for (final m in group.messages) {
+        if (m.id != messageId) continue;
+        _failedMessageEntries[messageId] = FailedMessageEntry(
+          messageId: messageId,
+          messageGroup: group,
+          onDispatch: onDispatch,
+        );
+        return;
+      }
+    }
   }
 
   Future retryMessage(Message message) async {
@@ -345,7 +410,7 @@ class ChatController extends ScrollController {
     _messageGroups.removeWhere((group) => group.messages.isEmpty);
     _failedMessageEntries.remove(message.id);
     _unreadMessageIds.remove(message.id);
-    notifyListeners();
+    _notifyMessagesChanged();
   }
 
   void removeMessageFromGroup(MessageGroup group, Message message) {
@@ -356,7 +421,7 @@ class ChatController extends ScrollController {
     _failedMessageEntries.remove(message.id);
     _unreadMessageIds.remove(message.id);
 
-    notifyListeners();
+    _notifyMessagesChanged();
   }
 
   void removeMessageGroupAt(MessageGroup group, int messageIndex) {
@@ -367,7 +432,7 @@ class ChatController extends ScrollController {
     _failedMessageEntries.remove(message.id);
     _unreadMessageIds.remove(message.id);
 
-    notifyListeners();
+    _notifyMessagesChanged();
   }
 
   bool isDateChangedComparedTo(Message message, Message other) {
@@ -398,6 +463,14 @@ class ChatController extends ScrollController {
     }
   }
 
+  /// The group containing this message, or null if none.
+  MessageGroup? _groupOf(String messageId) {
+    for (final group in _messageGroups) {
+      if (group.messages.any((m) => m.id == messageId)) return group;
+    }
+    return null;
+  }
+
   bool containsMessageId(String messageId) {
     for (final group in _messageGroups) {
       if (group.messages.any((m) => m.id == messageId)) {
@@ -418,7 +491,7 @@ class ChatController extends ScrollController {
         final index = group.messages.indexWhere((m) => m.id == messageId);
         if (index != -1) {
           final message = group.messages[index];
-          // isRead == false인 메시지만 읽음 처리
+          // Only mark messages that are still unread.
           if (message.isRead == false) {
             group.messages[index] = message.copyWith(isRead: true);
             hasChanges = true;
@@ -430,7 +503,7 @@ class ChatController extends ScrollController {
     _unreadMessageIds.clear();
 
     if (hasChanges) {
-      notifyListeners();
+      _notifyMessagesChanged();
     }
   }
 }

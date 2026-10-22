@@ -2,11 +2,7 @@ import 'package:flutter/material.dart';
 
 typedef SizeDetectedCallback = void Function(Size? oldSize, Size? newSize);
 
-enum SizeDetectedWidgetType {
-  height,
-  width,
-  all,
-}
+enum SizeDetectedWidgetType { height, width, all }
 
 class SizeDetectedWidget extends StatefulWidget {
   const SizeDetectedWidget({

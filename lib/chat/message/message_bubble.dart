@@ -9,12 +9,14 @@ class MessageBubble extends StatefulWidget {
     this.message, {
     super.key,
     this.customProfile,
+    this.showTime = true,
     required this.configuration,
     required this.onDelete,
     required this.onRetry,
   });
   final Message message;
   final Widget? customProfile;
+  final bool showTime;
   final ChatConfiguration configuration;
   final VoidCallback onDelete;
   final VoidCallback onRetry;
@@ -44,6 +46,7 @@ class _MessageBubbleState extends State<MessageBubble> {
           message: widget.message,
           isBaseAxisStart: isAxisStart,
           isSender: widget.message.isSender,
+          showTime: widget.showTime,
           loadingWidget: bubbleConfiguration.loadingWidget,
           onDelete: widget.onDelete,
           onRetry: widget.onRetry,

@@ -22,7 +22,7 @@ class MyApp extends StatelessWidget {
   }
 }
 
-// 간단한 텍스트 메시지 요소 구현
+// Minimal text message element implementation
 class TextMessageElement extends MessageElement {
   final String text;
   final TextStyle? style;
@@ -66,14 +66,14 @@ class _ChatScreenState extends State<ChatScreen> {
     super.initState();
     chatController = ChatController();
 
-    // 초기 메시지들 추가
+    // Seed initial messages
     _loadInitialMessages();
   }
 
   void _loadInitialMessages() {
     final now = DateTime.now();
 
-    // 받은 메시지
+    // Received message
     final receivedMessage = ReceiverMessage(
       id: 'msg1',
       timestamp: now.subtract(const Duration(minutes: 5)).toIso8601String(),
@@ -83,7 +83,7 @@ class _ChatScreenState extends State<ChatScreen> {
       ],
     );
 
-    // 보낸 메시지
+    // Sent message
     final sentMessage = SenderMessage(
       timestamp: now.subtract(const Duration(minutes: 3)).toIso8601String(),
       name: '나',
@@ -92,7 +92,7 @@ class _ChatScreenState extends State<ChatScreen> {
       ],
     );
 
-    // 또 다른 받은 메시지
+    // Another received message
     final receivedMessage2 = ReceiverMessage(
       id: 'msg3',
       timestamp: now.subtract(const Duration(minutes: 1)).toIso8601String(),
@@ -105,7 +105,7 @@ class _ChatScreenState extends State<ChatScreen> {
     chatController
         .setMessages([receivedMessage, sentMessage, receivedMessage2]);
 
-    // 하단으로 스크롤
+    // Scroll to the bottom
     WidgetsBinding.instance.addPostFrameCallback((_) {
       chatController.scrollToBottom();
     });
@@ -122,14 +122,14 @@ class _ChatScreenState extends State<ChatScreen> {
       ],
     );
 
-    // 메시지 전송 시뮬레이션
+    // Simulate sending a message
     chatController.dispatchMessage(
       message,
       onDispatch: (message) async {
-        // 실제 API 호출을 시뮬레이션
+        // Simulate a real API call
         await Future.delayed(const Duration(seconds: 1));
 
-        // 자동 응답 생성
+        // Generate an auto reply
         final responses = [
           '메시지를 잘 받았습니다!',
           '네, 이해했습니다.',
@@ -148,7 +148,7 @@ class _ChatScreenState extends State<ChatScreen> {
           ],
         );
 
-        // 자동 응답 추가
+        // Add the auto reply
         WidgetsBinding.instance.addPostFrameCallback((_) {
           chatController.addMessage(response);
           chatController.scrollToBottom();

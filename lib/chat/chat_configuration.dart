@@ -1,24 +1,18 @@
+import 'chat_controller.dart';
+import 'message/entity/message.dart';
+import 'message/message_loading.dart';
 import 'package:flutter/material.dart';
 import 'package:gap/gap.dart';
 import 'package:intl/intl.dart';
 
-import 'chat_controller.dart';
-import 'message/entity/message.dart';
-import 'message/message_loading.dart';
-
 class BubbleConfiguration {
-  final Widget Function(BuildContext context, String name)?
-      senderProfileBuilder;
-  final Widget Function(BuildContext context, String name)?
-      receiverProfileBuilder;
-  final Widget Function(BuildContext context, Widget child)?
-      senderBubbleBuilder;
-  final Widget Function(BuildContext context, Widget child)?
-      receiverBubbleBuilder;
+  final Widget Function(BuildContext context, String name)? senderProfileBuilder;
+  final Widget Function(BuildContext context, String name)? receiverProfileBuilder;
+  final Widget Function(BuildContext context, Widget child)? senderBubbleBuilder;
+  final Widget Function(BuildContext context, Widget child)? receiverBubbleBuilder;
   final Widget Function(BuildContext context, String timestamp)? timeBuilder;
 
-  final Widget Function(BuildContext context, bool isRead)?
-      readIndicatorBuilder;
+  final Widget Function(BuildContext context, bool isRead)? readIndicatorBuilder;
   final Widget loadingWidget;
 
   final double maxWidth;
@@ -39,19 +33,16 @@ class BubbleConfiguration {
     this.padding = const EdgeInsets.all(16),
     this.profileNameStyle,
     this.timeStyle,
+
     this.readIndicatorBuilder,
   });
 
   Widget buildProfile(BuildContext context, String name, bool isSender) {
-    final profileBuilder =
-        isSender ? senderProfileBuilder : receiverProfileBuilder;
+    final profileBuilder = isSender ? senderProfileBuilder : receiverProfileBuilder;
 
     if (profileBuilder != null) {
       if (profileNameStyle == null) return profileBuilder.call(context, name);
-      return DefaultTextStyle(
-        style: profileNameStyle!,
-        child: profileBuilder.call(context, name),
-      );
+      return DefaultTextStyle(style: profileNameStyle!, child: profileBuilder.call(context, name));
     }
 
     return Column(
@@ -108,27 +99,19 @@ class BubbleConfiguration {
       if (timeStyle == null) {
         return timeBuilder!.call(context, timestamp);
       }
-      return DefaultTextStyle(
-        style: timeStyle!,
-        child: timeBuilder!.call(context, timestamp),
-      );
+      return DefaultTextStyle(style: timeStyle!, child: timeBuilder!.call(context, timestamp));
     }
-    return Text(
-      DateFormat("yyyy.MM.dd").format(DateTime.parse(timestamp)),
-      style: timeStyle,
-    );
+    return Text(DateFormat("yyyy.MM.dd").format(DateTime.parse(timestamp)), style: timeStyle);
   }
 }
 
 enum ChatAlignment { start, end }
 
-/*
-  채팅
-*/
+/// Visual and behavioral options for the chat UI.
 class ChatConfiguration {
   final ChatAlignment senderAlignment;
   final Widget Function(BuildContext, Message, ChatController)?
-      newReceiveMessageNotificationBuilder;
+  newReceiveMessageNotificationBuilder;
   final Widget Function(BuildContext, String)? dateSeparatorBuilder;
   final Widget? readOnlyWidget;
 
@@ -136,6 +119,8 @@ class ChatConfiguration {
   final double newMessageScrollThreshold;
 
   final TextStyle? dateSeparatorStyle;
+
+  final EdgeInsets padding;
 
   const ChatConfiguration({
     this.senderAlignment = ChatAlignment.end,
@@ -145,6 +130,7 @@ class ChatConfiguration {
     this.newMessageScrollThreshold = 300,
     this.dateSeparatorBuilder,
     this.dateSeparatorStyle,
+    this.padding = const EdgeInsets.symmetric(horizontal: 30),
   });
 
   bool get isPrevProfile => senderAlignment == ChatAlignment.start;

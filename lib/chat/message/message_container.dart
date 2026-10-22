@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:gap/gap.dart';
-
 import 'entity/message.dart';
 import 'message_failed.dart';
 import 'message_loading.dart';
@@ -14,6 +13,7 @@ class MessageContainer extends StatelessWidget {
     required this.timeBuilder,
     required this.isSender,
     required this.maxWidth,
+    this.showTime = true,
     this.loadingWidget = const MessageLoading(),
     this.readIndicatorBuilder,
     this.onDelete,
@@ -23,11 +23,12 @@ class MessageContainer extends StatelessWidget {
   final Message message;
   final bool isBaseAxisStart;
   final bool isSender;
+  final bool showTime;
   final Widget Function(BuildContext context, Widget child, bool isSender)
-      bubbleBuilder;
+  bubbleBuilder;
   final Widget Function(BuildContext context, String timestamp) timeBuilder;
   final Widget Function(BuildContext context, bool isRead)?
-      readIndicatorBuilder;
+  readIndicatorBuilder;
   final VoidCallback? onDelete;
   final VoidCallback? onRetry;
   final Widget loadingWidget;
@@ -45,16 +46,17 @@ class MessageContainer extends StatelessWidget {
               : CrossAxisAlignment.end,
           children: [
             readIndicatorBuilder!(context, message.isRead!),
-            timeBuilder(context, message.timestamp),
+            if (showTime) timeBuilder(context, message.timestamp),
           ],
         );
       } else {
-        trailWidget = timeBuilder(context, message.timestamp);
+        if (showTime) trailWidget = timeBuilder(context, message.timestamp);
       }
     }
     return Row(
-      mainAxisAlignment:
-          isBaseAxisStart ? MainAxisAlignment.start : MainAxisAlignment.end,
+      mainAxisAlignment: isBaseAxisStart
+          ? MainAxisAlignment.start
+          : MainAxisAlignment.end,
       crossAxisAlignment: CrossAxisAlignment.end,
       children: [
         if (!isBaseAxisStart) ...[trailWidget, const Gap(12)],

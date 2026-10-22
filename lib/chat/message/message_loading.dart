@@ -69,12 +69,7 @@ class _MessageLoadingState extends State<MessageLoading>
     )!;
   }
 
-  CircleAvatar _buildCircleAvatar(
-    Color? color,
-  ) {
-    return CircleAvatar(
-      radius: 4,
-      backgroundColor: color,
-    );
+  CircleAvatar _buildCircleAvatar(Color? color) {
+    return CircleAvatar(radius: 4, backgroundColor: color);
   }
 }

@@ -14,6 +14,7 @@ A comprehensive and customizable chat widget toolkit for Flutter applications. T
 - **Responsive Design**: Auto-sizing components that adapt to different screen sizes
 - **Read-only Mode**: Display-only chat interfaces for viewing conversations
 - **Scroll Management**: Intelligent scroll behavior with new message notifications
+- **Optimized Scrolling**: Only message groups in the viewport are built, and scrolling never rebuilds the list
 
 ## Getting Started
 
@@ -109,6 +110,29 @@ Chat(
 )
 ```
 
+### Handling Blocked Messages and Failed Bubbles
+
+```dart
+// Throw from onDispatch when the server blocks the message:
+// the bubble is removed and no retry entry is created.
+onDispatch: (message) async {
+  final response = await yourApiCall(message);
+  if (response.isBlocked) {
+    throw MessageBlockedException(code: response.code, message: response.text);
+  }
+  return response.message;
+},
+
+// Delete button on a failed bubble. The message is removed only if this returns true.
+Chat(
+  chatController: chatController,
+  onDeleteFailedMessage: (message) async => await yourDeleteApi(message),
+)
+
+// Make a failed message loaded from history retryable.
+chatController.registerFailedMessage(messageId, onDispatch);
+```
+
 ## Customization
 
 ### Basic Configuration
@@ -160,6 +184,7 @@ final controller = ChatController(
 ### ChatConfiguration
 
 - `senderAlignment`: Message alignment (start/end)
+- `padding`: List padding (default: horizontal 30)
 - `customInputField`: Custom input field widget
 - `newReceiveMessageNotificationBuilder`: New message notification builder
 - `bubbleConfiguration`: Bubble appearance settings
@@ -214,12 +239,12 @@ chatController.newReceiveMessageStream.listen((message) {
 ## Requirements
 
 - Flutter SDK: >=3.24.0
-- Dart SDK: ^3.5.0
+- Dart SDK: ^3.12.0
 
 ## Dependencies
 
 - `gap`: ^3.0.1 - For spacing utilities
-- `intl`: ^0.19.0 - For internationalization
+- `intl`: ^0.20.2 - For internationalization
 - `uuid`: ^4.5.1 - For unique ID generation
 
 ## Contributing
