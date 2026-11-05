@@ -8,6 +8,8 @@ import 'message/entity/message_group.dart';
 
 typedef MessageDispatchCallback = Future<Message?> Function(Message);
 typedef CustomSortCallback = int Function(Message a, Message b);
+typedef AdditionalGroupCondition =
+    bool Function(MessageGroup group, Message message);
 
 /// Thrown by a dispatch callback when the server refuses to send the message.
 class MessageBlockedException implements Exception {
@@ -28,8 +30,11 @@ class MessageDispatchResult {
   final bool isSuccess;
   final Exception? exception;
 
-  MessageDispatchResult(
-      {required this.message, required this.isSuccess, this.exception});
+  MessageDispatchResult({
+    required this.message,
+    required this.isSuccess,
+    this.exception,
+  });
 }
 
 class ChatController extends ScrollController {
@@ -64,6 +69,12 @@ class ChatController extends ScrollController {
 
   // Tie-breaker for messages that share the same timestamp.
   final CustomSortCallback? _customSortCallback;
+
+  final AdditionalGroupCondition? _additionalGroupCondition;
+
+  bool _canJoinGroup(MessageGroup group, Message message) =>
+      defaultCanJoinGroup(group, message) &&
+      (_additionalGroupCondition?.call(group, message) ?? true);
 
   @override
   void notifyListeners() {
@@ -141,11 +152,7 @@ class ChatController extends ScrollController {
         );
         continue;
       }
-      if (_messageGroups.first.isSender == message.isSender &&
-          isSameMinute(
-            DateTime.parse(_messageGroups.first.timestamp),
-            DateTime.parse(message.timestamp),
-          )) {
+      if (_canJoinGroup(_messageGroups.first, message)) {
         _messageGroups.first.messages.insert(0, message);
       } else {
         _messageGroups.insert(
@@ -162,8 +169,21 @@ class ChatController extends ScrollController {
     _notifyMessagesChanged();
   }
 
-  ChatController({bool reverse = false, this._customSortCallback}) {
+  ChatController({
+    bool reverse = false,
+    this._customSortCallback,
+    this._additionalGroupCondition,
+  }) {
     _reverse = reverse;
+  }
+
+  bool defaultCanJoinGroup(MessageGroup group, Message message) {
+    return group.isSender == message.isSender &&
+        group.name == message.name &&
+        isSameMinute(
+          DateTime.parse(group.timestamp),
+          DateTime.parse(message.timestamp),
+        );
   }
 
   @override
@@ -226,11 +246,7 @@ class ChatController extends ScrollController {
     // _messages.add(message); _messages.sort((a, b) { if (a.isFailed == b.isFailed) return 0; if (a.is…
     late final MessageGroup messageGroup;
     if (_messageGroups.isEmpty ||
-        _messageGroups.last.isSender != message.isSender ||
-        !isSameMinute(
-          DateTime.parse(_messageGroups.last.timestamp),
-          DateTime.parse(message.timestamp),
-        )) {
+        !_canJoinGroup(_messageGroups.last, message)) {
       messageGroup = MessageGroup(
         name: message.name,
         isSender: message.isSender,
@@ -244,10 +260,8 @@ class ChatController extends ScrollController {
     }
 
     if (_failedMessageEntries.containsKey(message.id)) {
-      _failedMessageEntries[message.id] =
-          _failedMessageEntries[message.id]!.copyWith(
-        messageGroup: messageGroup,
-      );
+      _failedMessageEntries[message.id] = _failedMessageEntries[message.id]!
+          .copyWith(messageGroup: messageGroup);
     }
 
     if (_failedMessageEntries.isNotEmpty) {
@@ -255,8 +269,9 @@ class ChatController extends ScrollController {
 
       for (final failedId in failedIds) {
         final entry = _failedMessageEntries[failedId]!;
-        final failedMessage =
-            entry.messageGroup.messages.firstWhere((m) => m.id == failedId);
+        final failedMessage = entry.messageGroup.messages.firstWhere(
+          (m) => m.id == failedId,
+        );
 
         entry.messageGroup.messages.remove(failedMessage);
         if (entry.messageGroup.messages.isEmpty) {
@@ -264,7 +279,7 @@ class ChatController extends ScrollController {
         }
         late final MessageGroup newGroup;
         if (_messageGroups.isNotEmpty &&
-            _messageGroups.last.isSender == failedMessage.isSender) {
+            _canJoinGroup(_messageGroups.last, failedMessage)) {
           newGroup = _messageGroups.last;
           newGroup.messages.add(failedMessage);
         } else {
@@ -276,8 +291,9 @@ class ChatController extends ScrollController {
           );
           _messageGroups.add(newGroup);
         }
-        _failedMessageEntries[failedId] =
-            entry.copyWith(messageGroup: newGroup);
+        _failedMessageEntries[failedId] = entry.copyWith(
+          messageGroup: newGroup,
+        );
       }
     }
     if (message.isRead == false) {
@@ -293,8 +309,9 @@ class ChatController extends ScrollController {
     Message message, {
     required MessageDispatchCallback onDispatch,
   }) async {
-    final messageGroup =
-        addMessage(message.copyWith(isLoading: true, isFailed: false));
+    final messageGroup = addMessage(
+      message.copyWith(isLoading: true, isFailed: false),
+    );
     late final MessageDispatchResult dispatchResult;
     late final Message? result;
 
@@ -302,24 +319,32 @@ class ChatController extends ScrollController {
       result = await onDispatch(message);
     } on MessageBlockedException catch (e) {
       // A block is not a failure: remove the bubble and do not register a retry entry.
-      final blockedIndex = messageGroup.messages
-          .indexWhere((element) => element.id == message.id);
+      final blockedIndex = messageGroup.messages.indexWhere(
+        (element) => element.id == message.id,
+      );
       if (blockedIndex >= 0) {
         removeMessageGroupAt(messageGroup, blockedIndex);
       }
       final blockedResult = MessageDispatchResult(
-          message: message, isSuccess: false, exception: e);
+        message: message,
+        isSuccess: false,
+        exception: e,
+      );
       _dispatchResultController.add(blockedResult);
       _notifyMessagesChanged();
       return blockedResult;
     }
-    final index =
-        messageGroup.messages.indexWhere((element) => element.id == message.id);
+    final index = messageGroup.messages.indexWhere(
+      (element) => element.id == message.id,
+    );
     if (result != null) {
       messageGroup.messages[index] = result;
       messageGroup.sortMessages();
       dispatchResult = MessageDispatchResult(
-          message: message, isSuccess: true, exception: null);
+        message: message,
+        isSuccess: true,
+        exception: null,
+      );
       if (!result.isSender) {
         _newReceiveMessageController.add(result);
       }
@@ -356,7 +381,9 @@ class ChatController extends ScrollController {
 
   // Registers a failed message loaded from history as retryable via [onDispatch].
   void registerFailedMessage(
-      String messageId, MessageDispatchCallback onDispatch) {
+    String messageId,
+    MessageDispatchCallback onDispatch,
+  ) {
     for (final group in _messageGroups) {
       for (final m in group.messages) {
         if (m.id != messageId) continue;

@@ -185,3 +185,29 @@ fix: Add missing filename configuration for web platform
 
 - 크기 변경 처리에서 `oldSize` null 체크로 발생할 수 있던 크래시를 고쳤습니다.
 - `_onScroll`이 스크롤 위치를 읽기 전에 `mounted`와 `hasClients`를 확인합니다.
+
+## 1.5.0
+
+### Added
+
+- `ChatController(additionalGroupCondition: ...)`: optional `AdditionalGroupCondition` callback that adds your own condition for whether a message joins an existing message group. It is applied on top of the default condition.
+- `ChatController.defaultCanJoinGroup`: the default grouping condition (same sender, same name, same minute).
+
+### Changed
+
+- Messages are now grouped only when the sender name is also the same (previously only `isSender` and the minute were compared).
+- Failed messages that are moved to the end now follow the same grouping condition instead of only comparing `isSender`.
+
+---
+
+## 1.5.0 (한국어)
+
+### 추가
+
+- `ChatController(additionalGroupCondition: ...)`: 메시지를 기존 묶음에 합칠지 결정하는 조건을 직접 추가할 수 있는 `AdditionalGroupCondition` 콜백(선택). 기본 조건에 더해 적용됩니다.
+- `ChatController.defaultCanJoinGroup`: 기본 묶음 조건(같은 발신자, 같은 이름, 같은 분)입니다.
+
+### 변경
+
+- 발신자 이름까지 같을 때만 메시지를 묶습니다(기존에는 `isSender`와 분만 비교).
+- 맨 뒤로 이동하는 실패 메시지도 `isSender`만 비교하지 않고 동일한 묶음 조건을 따릅니다.
