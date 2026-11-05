@@ -52,6 +52,7 @@ class _MessageBubbleState extends State<MessageBubble> {
           onRetry: widget.onRetry,
           maxWidth: widget.message.width ?? bubbleConfiguration.maxWidth,
           readIndicatorBuilder: bubbleConfiguration.readIndicatorBuilder,
+          menuConfiguration: bubbleConfiguration.menuConfiguration,
         ),
       ],
     );

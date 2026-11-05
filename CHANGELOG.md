@@ -233,3 +233,51 @@ fix: Add missing filename configuration for web platform
 ### 추가
 
 - 새 의존성: `super_sliver_list`.
+
+## 1.6.0
+
+### Added
+
+- **Bubble context menu**: a long press on a message bubble opens a menu — a held touch, or a held mouse button on desktop and web. Sender and receiver menus are configured separately through `BubbleConfiguration(menuConfiguration: BubbleMenuConfiguration(...))`.
+  - `senderItemsBuilder` / `receiverItemsBuilder`: entries of the default popup menu for each side. A side without a builder has no menu; returning an empty list suppresses the menu for that message.
+  - `senderMenuHandler` / `receiverMenuHandler`: present a fully custom menu (bottom sheet, dialog, overlay) instead of the default popup for that side.
+  - `BubbleMenuItem`: a menu entry with `label`, `icon`, `child`, `enabled`, `textStyle`, `height`, `padding`, and an `onSelected` callback.
+  - `BubbleMenuRequest`: passed to every menu callback with the `message`, `isSender`, the pointer's `globalPosition`, and the bubble's global `bubbleRect`.
+  - Trigger and style options: `enableLongPress`, `enableHapticFeedback`, `color`, `surfaceTintColor`, `shape`, `elevation`, `constraints`, `useRootNavigator`.
+  - `animationStyle`: retimes the default menu's open/close transition (duration, curve, reverse curve), or `AnimationStyle.noAnimation` to show it instantly. For a different kind of transition, use a menu handler.
+  - `showBubbleMenu(...)` is exported for opening the default menu yourself.
+- `MessageElement` is now exported from `package:chat_toolkit/chat_toolkit.dart`, so custom elements no longer need a deep import.
+
+### Changed
+
+- The example app now demonstrates the bubble menu (different entries for sent and received messages), adds a working input field, and ships real widget tests instead of the default counter test.
+
+### Notes
+
+- The menu is opt-in: without `menuConfiguration`, bubble gestures are unchanged.
+- Right click is deliberately not a trigger: on Flutter web it would open the browser's own context menu at the same time. Holding the mouse button counts as a long press, so desktop and web users still get the menu.
+
+---
+
+## 1.6.0 (한국어)
+
+### 추가
+
+- **말풍선 컨텍스트 메뉴**: 말풍선을 길게 누르면 메뉴가 열립니다(터치 꾹 누르기, 데스크톱·웹에서는 마우스 버튼 꾹 누르기). 보낸 사람과 받는 사람 메뉴를 `BubbleConfiguration(menuConfiguration: BubbleMenuConfiguration(...))`에서 각각 따로 설정합니다.
+  - `senderItemsBuilder` / `receiverItemsBuilder`: 각 방향의 기본 팝업 메뉴 항목입니다. 빌더가 없는 쪽은 메뉴가 열리지 않고, 빈 리스트를 반환하면 해당 메시지에서만 메뉴가 열리지 않습니다.
+  - `senderMenuHandler` / `receiverMenuHandler`: 기본 팝업 대신 바텀시트·다이얼로그 등 원하는 UI를 직접 띄울 수 있습니다.
+  - `BubbleMenuItem`: `label`, `icon`, `child`, `enabled`, `textStyle`, `height`, `padding`과 `onSelected` 콜백을 가진 메뉴 항목입니다.
+  - `BubbleMenuRequest`: 메뉴 콜백에 전달되며 `message`, `isSender`, 포인터의 `globalPosition`, 말풍선의 전역 좌표 `bubbleRect`를 담고 있습니다.
+  - 동작·스타일 옵션: `enableLongPress`, `enableHapticFeedback`, `color`, `surfaceTintColor`, `shape`, `elevation`, `constraints`, `useRootNavigator`.
+  - `animationStyle`: 기본 메뉴가 열리고 닫히는 속도·커브를 조절합니다(`AnimationStyle.noAnimation`이면 즉시 표시). 트랜지션 종류 자체를 바꾸려면 메뉴 핸들러를 쓰세요.
+  - 기본 메뉴를 직접 띄울 수 있도록 `showBubbleMenu(...)`도 함께 공개됩니다.
+- `MessageElement`를 `package:chat_toolkit/chat_toolkit.dart`에서 바로 export 합니다. 커스텀 엘리먼트를 만들 때 내부 경로를 직접 import 하지 않아도 됩니다.
+
+### 변경
+
+- 예제 앱이 말풍선 메뉴(보낸 메시지와 받은 메시지에 서로 다른 항목)를 보여주고, 동작하는 입력창이 추가되었으며, 기본 카운터 테스트 대신 실제 위젯 테스트를 포함합니다.
+
+### 참고
+
+- 선택 기능입니다. `menuConfiguration`을 설정하지 않으면 말풍선 제스처는 기존과 동일합니다.
+- 우클릭은 의도적으로 트리거에서 제외했습니다. Flutter 웹에서는 브라우저 기본 컨텍스트 메뉴가 함께 뜨기 때문입니다. 마우스 버튼을 꾹 누르면 길게 누르기로 인식되므로 데스크톱·웹에서도 메뉴를 쓸 수 있습니다.

@@ -1,6 +1,6 @@
-import 'package:chat_toolkit/chat/message/elements/message_element.dart';
-import 'package:flutter/material.dart';
 import 'package:chat_toolkit/chat_toolkit.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 void main() {
   runApp(const MyApp());
@@ -168,6 +168,111 @@ class _ChatScreenState extends State<ChatScreen> {
     super.dispose();
   }
 
+  // Collects the text of a message so the menu can copy it.
+  String _plainText(Message message) => message.elements
+      .whereType<TextMessageElement>()
+      .map((element) => element.text)
+      .join('\n');
+
+  void _showSnackBar(BuildContext context, String text) {
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text(text)));
+  }
+
+  // A long press on a bubble opens these menus.
+  // Sender and receiver get a different set of entries.
+  //
+  // Styled to read like a web dropdown rather than a mobile sheet: thin border,
+  // small radius, low elevation, compact 32px rows, 13px text, and no open
+  // animation. All of it is plain BubbleMenuConfiguration / BubbleMenuItem
+  // options — no custom menu code.
+  static const _menuTextColor = Color(0xFF202124);
+  static const _menuIconColor = Color(0xFF5F6368);
+  static const _menuDangerColor = Color(0xFFD93025);
+
+  // One compact, web-looking row.
+  BubbleMenuItem _menuItem({
+    required String label,
+    required IconData icon,
+    BubbleMenuItemCallback? onSelected,
+    bool enabled = true,
+    bool isDestructive = false,
+  }) {
+    final color = isDestructive ? _menuDangerColor : _menuTextColor;
+    return BubbleMenuItem(
+      label: label,
+      icon: Icon(
+        icon,
+        size: 16,
+        color: isDestructive ? _menuDangerColor : _menuIconColor,
+      ),
+      enabled: enabled,
+      height: 32,
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      textStyle: TextStyle(fontSize: 13, color: color),
+      onSelected: onSelected,
+    );
+  }
+
+  void _copy(BuildContext context, BubbleMenuRequest request) {
+    Clipboard.setData(ClipboardData(text: _plainText(request.message)));
+    _showSnackBar(context, '복사했습니다');
+  }
+
+  BubbleMenuConfiguration get _bubbleMenu => BubbleMenuConfiguration(
+        color: Colors.white,
+        elevation: 2,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(6),
+          side: const BorderSide(color: Color(0xFFE2E2E2)),
+        ),
+        constraints: const BoxConstraints(minWidth: 176),
+        // Web dropdowns appear instantly instead of expanding.
+        animationStyle: AnimationStyle.noAnimation,
+        senderItemsBuilder: (context, request) {
+          // No menu while the message is still being sent.
+          if (request.message.isLoading) return const [];
+          return [
+            _menuItem(label: '복사', icon: Icons.copy, onSelected: _copy),
+            _menuItem(
+              label: '재전송',
+              icon: Icons.refresh,
+              enabled: request.message.isFailed,
+              onSelected: (context, request) =>
+                  chatController.retryMessage(request.message),
+            ),
+            _menuItem(
+              label: '삭제',
+              icon: Icons.delete_outline,
+              isDestructive: true,
+              onSelected: (context, request) =>
+                  chatController.removeMessageEverywhere(request.message),
+            ),
+          ];
+        },
+        receiverItemsBuilder: (context, request) {
+          if (request.message.isLoading) return const [];
+          return [
+            _menuItem(label: '복사', icon: Icons.copy, onSelected: _copy),
+            _menuItem(
+              label: '답장',
+              icon: Icons.reply,
+              onSelected: (context, request) => _showSnackBar(
+                context,
+                '${request.message.name}님에게 답장',
+              ),
+            ),
+            _menuItem(
+              label: '신고',
+              icon: Icons.flag_outlined,
+              onSelected: (context, request) =>
+                  _showSnackBar(context, '신고했습니다'),
+            ),
+          ];
+        },
+      );
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -177,11 +282,22 @@ class _ChatScreenState extends State<ChatScreen> {
       ),
       body: Column(
         children: [
+          Container(
+            width: double.infinity,
+            color: Colors.amber.shade100,
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            child: const Text(
+              '말풍선을 길게 누르면(터치·마우스 모두 꾹 누르기) 메뉴가 열립니다. '
+              '보낸 메시지와 받은 메시지의 메뉴가 서로 다릅니다.',
+              style: TextStyle(fontSize: 12),
+            ),
+          ),
           Expanded(
             child: Chat(
               chatController: chatController,
               configuration: ChatConfiguration(
                 bubbleConfiguration: BubbleConfiguration(
+                  menuConfiguration: _bubbleMenu,
                   senderBubbleBuilder: (context, child) {
                     return Container(
                       padding: const EdgeInsets.symmetric(
@@ -232,9 +348,45 @@ class _ChatScreenState extends State<ChatScreen> {
                   },
                 ),
               ),
+              customInputField: (context, controller) => _buildInputField(),
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildInputField() {
+    return SafeArea(
+      top: false,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+        child: Row(
+          children: [
+            Expanded(
+              child: TextField(
+                controller: textController,
+                textInputAction: TextInputAction.send,
+                onSubmitted: (_) => _sendMessage(),
+                decoration: InputDecoration(
+                  hintText: '메시지를 입력하세요',
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 12,
+                  ),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(24),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            IconButton.filled(
+              onPressed: _sendMessage,
+              icon: const Icon(Icons.send),
+            ),
+          ],
+        ),
       ),
     );
   }

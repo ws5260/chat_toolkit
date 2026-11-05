@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:gap/gap.dart';
+import 'bubble_menu.dart';
 import 'entity/message.dart';
 import 'message_failed.dart';
 import 'message_loading.dart';
@@ -18,6 +19,7 @@ class MessageContainer extends StatelessWidget {
     this.readIndicatorBuilder,
     this.onDelete,
     this.onRetry,
+    this.menuConfiguration,
   });
   final double maxWidth;
   final Message message;
@@ -32,6 +34,7 @@ class MessageContainer extends StatelessWidget {
   final VoidCallback? onDelete;
   final VoidCallback? onRetry;
   final Widget loadingWidget;
+  final BubbleMenuConfiguration? menuConfiguration;
 
   @override
   Widget build(BuildContext context) {
@@ -62,26 +65,31 @@ class MessageContainer extends StatelessWidget {
         if (!isBaseAxisStart) ...[trailWidget, const Gap(12)],
         Flexible(
           fit: FlexFit.loose,
-          child: bubbleBuilder(
-            context,
-            ConstrainedBox(
-              constraints: BoxConstraints(maxWidth: maxWidth),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.end,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  if (message.isLoading) ...[
-                    loadingWidget,
-                  ] else ...[
-                    for (int i = 0; i < message.elements.length; i++) ...[
-                      message.elements[i].toWidget(context),
-                      if (i != message.elements.length - 1) const Gap(10),
+          child: BubbleMenuDetector(
+            message: message,
+            isSender: isSender,
+            configuration: menuConfiguration,
+            child: bubbleBuilder(
+              context,
+              ConstrainedBox(
+                constraints: BoxConstraints(maxWidth: maxWidth),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (message.isLoading) ...[
+                      loadingWidget,
+                    ] else ...[
+                      for (int i = 0; i < message.elements.length; i++) ...[
+                        message.elements[i].toWidget(context),
+                        if (i != message.elements.length - 1) const Gap(10),
+                      ],
                     ],
                   ],
-                ],
+                ),
               ),
+              isSender,
             ),
-            isSender,
           ),
         ),
         if (isBaseAxisStart) ...[const Gap(12), trailWidget],

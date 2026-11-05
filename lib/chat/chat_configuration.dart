@@ -1,4 +1,5 @@
 import 'chat_controller.dart';
+import 'message/bubble_menu.dart';
 import 'message/entity/message.dart';
 import 'message/message_loading.dart';
 import 'package:flutter/material.dart';
@@ -22,6 +23,10 @@ class BubbleConfiguration {
 
   final TextStyle? timeStyle;
 
+  /// Context menu opened by a long press or a right click on a bubble.
+  /// Sender and receiver menus are configured separately. `null` disables it.
+  final BubbleMenuConfiguration? menuConfiguration;
+
   const BubbleConfiguration({
     this.senderProfileBuilder,
     this.receiverProfileBuilder,
@@ -33,6 +38,7 @@ class BubbleConfiguration {
     this.padding = const EdgeInsets.all(16),
     this.profileNameStyle,
     this.timeStyle,
+    this.menuConfiguration,
 
     this.readIndicatorBuilder,
   });
