@@ -211,3 +211,25 @@ fix: Add missing filename configuration for web platform
 
 - 발신자 이름까지 같을 때만 메시지를 묶습니다(기존에는 `isSender`와 분만 비교).
 - 맨 뒤로 이동하는 실패 메시지도 `isSender`만 비교하지 않고 동일한 묶음 조건을 따릅니다.
+
+## 1.5.1
+
+### Changed
+
+- The message list now uses `SuperSliverList` from the [`super_sliver_list`](https://pub.dev/packages/super_sliver_list) package instead of `SliverList`, for more accurate scroll extent estimation and smoother scrolling with variable-height messages.
+
+### Added
+
+- New dependency: `super_sliver_list`.
+
+---
+
+## 1.5.1 (한국어)
+
+### 변경
+
+- 메시지 목록이 `SliverList` 대신 [`super_sliver_list`](https://pub.dev/packages/super_sliver_list) 패키지의 `SuperSliverList`를 사용합니다. 높이가 제각각인 메시지에서도 스크롤 범위를 더 정확히 계산해 스크롤이 더 부드럽습니다.
+
+### 추가
+
+- 새 의존성: `super_sliver_list`.

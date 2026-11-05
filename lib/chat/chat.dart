@@ -9,6 +9,7 @@ import 'message/message_bubble.dart';
 import 'size_detected_widget.dart';
 import 'package:flutter/material.dart';
 import 'package:gap/gap.dart';
+import 'package:super_sliver_list/super_sliver_list.dart';
 
 class Chat extends StatefulWidget {
   const Chat({
@@ -205,7 +206,7 @@ class _ChatState extends State<Chat> {
 
     return SliverPadding(
       padding: widget.configuration.padding,
-      sliver: SliverList(
+      sliver: SuperSliverList(
         delegate: SliverChildBuilderDelegate(
           (context, index) {
             final groupIndex = groupIndexAt(index);

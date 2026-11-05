@@ -1,60 +1,58 @@
 # Chat Toolkit
 
-A comprehensive and customizable chat widget toolkit for Flutter applications. This package provides a complete chat interface with message handling, real-time updates, and extensive customization options.
+A customizable chat widget toolkit for Flutter. It gives you a ready-to-use chat UI with message grouping, async sending with retry, and an optimized scrolling list.
+
+## Contents
+
+- [Features](#features)
+- [Installation](#installation)
+- [Quick start](#quick-start)
+- [Usage](#usage)
+- [Customization](#customization)
+- [API reference](#api-reference)
+- [Requirements](#requirements)
 
 ## Features
 
-- **Complete Chat Interface**: Ready-to-use chat widget with message display and input functionality
-- **Message Management**: Support for different message types (sender/receiver) with state management
-- **Real-time Updates**: Stream-based message handling for live chat experiences
-- **Customizable UI**: Fully customizable message bubbles, profiles, and input fields
-- **Message States**: Built-in support for loading, failed, and success message states
-- **Message Grouping**: Automatic message organization and grouping
-- **Custom Message Sorting**: Configurable priority system for messages with identical timestamps
-- **Responsive Design**: Auto-sizing components that adapt to different screen sizes
-- **Read-only Mode**: Display-only chat interfaces for viewing conversations
-- **Scroll Management**: Intelligent scroll behavior with new message notifications
-- **Optimized Scrolling**: Only message groups in the viewport are built, and scrolling never rebuilds the list
+| Area | What you get |
+| --- | --- |
+| **UI** | Chat widget with message list, input field, profiles, timestamps, read-only mode |
+| **Messages** | Sender/receiver messages, extensible message elements, loading / failed / success states |
+| **Sending** | Async dispatch with result stream, retry for failed messages, blocked-message handling |
+| **Grouping & sorting** | Automatic message grouping (customizable), tie-breaker sorting for identical timestamps |
+| **Scrolling** | New-message notification, load older messages, only visible groups are built |
 
-## Getting Started
-
-Add this package to your `pubspec.yaml`:
+## Installation
 
 ```yaml
 dependencies:
-  chat_toolkit: $latest_version
+  chat_toolkit: ^latest_version
 ```
-
-Then run:
 
 ```bash
 flutter pub get
 ```
 
-## Quick Start
+## Quick start
 
 ```dart
 import 'package:flutter/material.dart';
 import 'package:chat_toolkit/chat_toolkit.dart';
 
 class ChatScreen extends StatefulWidget {
+  const ChatScreen({super.key});
+
   @override
-  _ChatScreenState createState() => _ChatScreenState();
+  State<ChatScreen> createState() => _ChatScreenState();
 }
 
 class _ChatScreenState extends State<ChatScreen> {
-  late ChatController chatController;
-
-  @override
-  void initState() {
-    super.initState();
-    chatController = ChatController();
-  }
+  final chatController = ChatController();
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text('Chat')),
+      appBar: AppBar(title: const Text('Chat')),
       body: Chat(
         chatController: chatController,
         configuration: ChatConfiguration(),
@@ -70,12 +68,11 @@ class _ChatScreenState extends State<ChatScreen> {
 }
 ```
 
-## Core Usage
+## Usage
 
-### Adding Messages
+### Add a message
 
 ```dart
-// Add a simple text message
 chatController.addMessage(
   SenderMessage(
     name: 'You',
@@ -85,20 +82,68 @@ chatController.addMessage(
 );
 ```
 
-### Async Message Sending
+### Message types
+
+```dart
+// Outgoing
+SenderMessage(
+  name: 'User Name',
+  timestamp: DateTime.now().toIso8601String(),
+  elements: [TextMessageElement(text: 'Hello world!')],
+);
+
+// Incoming
+ReceiverMessage(
+  id: 'unique_id',
+  name: 'Other User',
+  timestamp: DateTime.now().toIso8601String(),
+  elements: [TextMessageElement(text: 'Hi there!')],
+);
+```
+
+### Send asynchronously
 
 ```dart
 final result = await chatController.dispatchMessage(
   message,
   onDispatch: (message) async {
-    // Your API call here
     final response = await yourApiCall(message);
-    return response; // Return processed message or null if failed
+    return response; // processed message, or null if it failed
   },
 );
 ```
 
-### Loading More Messages
+While sending, the bubble shows a loading state. On failure it shows retry / delete buttons.
+
+### Handle blocked messages and failed bubbles
+
+```dart
+// Throw from onDispatch when the server blocks the message.
+// The bubble is removed and no retry entry is created.
+onDispatch: (message) async {
+  final response = await yourApiCall(message);
+  if (response.isBlocked) {
+    throw MessageBlockedException(code: response.code, message: response.text);
+  }
+  return response.message;
+},
+```
+
+```dart
+// Delete button on a failed bubble.
+// The message is removed only if this returns true.
+Chat(
+  chatController: chatController,
+  onDeleteFailedMessage: (message) async => await yourDeleteApi(message),
+)
+```
+
+```dart
+// Make a failed message loaded from history retryable.
+chatController.registerFailedMessage(messageId, onDispatch);
+```
+
+### Load older messages
 
 ```dart
 Chat(
@@ -110,32 +155,25 @@ Chat(
 )
 ```
 
-### Handling Blocked Messages and Failed Bubbles
+### Listen to events
 
 ```dart
-// Throw from onDispatch when the server blocks the message:
-// the bubble is removed and no retry entry is created.
-onDispatch: (message) async {
-  final response = await yourApiCall(message);
-  if (response.isBlocked) {
-    throw MessageBlockedException(code: response.code, message: response.text);
+chatController.dispatchResultStream.listen((result) {
+  if (result.isSuccess) {
+    print('Message sent');
+  } else {
+    print('Failed: ${result.exception}');
   }
-  return response.message;
-},
+});
 
-// Delete button on a failed bubble. The message is removed only if this returns true.
-Chat(
-  chatController: chatController,
-  onDeleteFailedMessage: (message) async => await yourDeleteApi(message),
-)
-
-// Make a failed message loaded from history retryable.
-chatController.registerFailedMessage(messageId, onDispatch);
+chatController.newReceiveMessageStream.listen((message) {
+  print('New message: ${message.id}');
+});
 ```
 
 ## Customization
 
-### Basic Configuration
+### Appearance
 
 ```dart
 Chat(
@@ -151,7 +189,7 @@ Chat(
 )
 ```
 
-### Custom Message Elements
+### Custom message elements
 
 ```dart
 class ImageElement extends MessageElement {
@@ -159,102 +197,79 @@ class ImageElement extends MessageElement {
   const ImageElement({required this.url});
 
   @override
-  Widget toWidget(BuildContext context) {
-    return Image.network(url);
-  }
+  Widget toWidget(BuildContext context) => Image.network(url);
 
   @override
   MessageElement copyWith() => ImageElement(url: url);
 }
 ```
 
-### Custom Message Sorting
+### Sorting messages with identical timestamps
 
 ```dart
 final controller = ChatController(
-  customSortCallback: (message1, message2) {
-    // Custom sorting for messages with identical timestamps
-    return message1.id.compareTo(message2.id);
+  customSortCallback: (a, b) => a.id.compareTo(b.id),
+);
+```
+
+### Message grouping
+
+By default, consecutive messages are grouped when they have the same sender, the same name, and the same minute. Add your own condition on top of that:
+
+```dart
+final controller = ChatController(
+  additionalGroupCondition: (group, message) {
+    return group.messages.length < 10; // e.g. at most 10 messages per group
   },
 );
 ```
 
-## Configuration Options
+## API reference
 
 ### ChatConfiguration
 
-- `senderAlignment`: Message alignment (start/end)
-- `padding`: List padding (default: horizontal 30)
-- `customInputField`: Custom input field widget
-- `newReceiveMessageNotificationBuilder`: New message notification builder
-- `bubbleConfiguration`: Bubble appearance settings
-- `readOnlyWidget`: Widget for read-only mode
+| Option | Description |
+| --- | --- |
+| `senderAlignment` | Message alignment (start / end) |
+| `padding` | List padding (default: horizontal 30) |
+| `customInputField` | Custom input field widget |
+| `newReceiveMessageNotificationBuilder` | Builder for the new-message notification |
+| `bubbleConfiguration` | Bubble appearance settings |
+| `readOnlyWidget` | Widget shown in read-only mode |
 
 ### BubbleConfiguration
 
-- `profileBuilder`: Custom profile widget builder
-- `senderBubbleBuilder`: Custom sender bubble builder
-- `receiverBubbleBuilder`: Custom receiver bubble builder
-- `timeBuilder`: Custom timestamp builder
-- `loadingWidget`: Custom loading indicator
-- `maxWidth`: Maximum bubble width
+| Option | Description |
+| --- | --- |
+| `profileBuilder` | Profile widget builder |
+| `senderBubbleBuilder` | Sender bubble builder |
+| `receiverBubbleBuilder` | Receiver bubble builder |
+| `timeBuilder` | Timestamp builder |
+| `loadingWidget` | Loading indicator |
+| `maxWidth` | Maximum bubble width |
 
-## Message Types
+### ChatController
 
-```dart
-// Sender message (outgoing)
-SenderMessage(
-  name: 'User Name',
-  timestamp: DateTime.now().toIso8601String(),
-  elements: [TextMessageElement(text: 'Hello world!')],
-);
-
-// Receiver message (incoming)
-ReceiverMessage(
-  id: 'unique_id',
-  name: 'Other User',
-  timestamp: DateTime.now().toIso8601String(),
-  elements: [TextMessageElement(text: 'Hi there!')],
-);
-```
-
-## Event Streams
-
-```dart
-// Listen to dispatch results
-chatController.dispatchResultStream.listen((result) {
-  if (result.isSuccess) {
-    print('Message sent successfully');
-  } else {
-    print('Failed: ${result.exception}');
-  }
-});
-
-// Listen to new received messages
-chatController.newReceiveMessageStream.listen((message) {
-  print('New message: ${message.id}');
-});
-```
+| Option | Description |
+| --- | --- |
+| `customSortCallback` | Tie-breaker for messages with identical timestamps |
+| `additionalGroupCondition` | Extra condition for joining a message group |
 
 ## Requirements
 
-- Flutter SDK: >=3.24.0
-- Dart SDK: ^3.12.0
+- Flutter SDK >= 3.24.0
+- Dart SDK ^3.12.0
 
-## Dependencies
-
-- `gap`: ^3.0.1 - For spacing utilities
-- `intl`: ^0.20.2 - For internationalization
-- `uuid`: ^4.5.1 - For unique ID generation
+Dependencies: `gap`, `intl`, `super_sliver_list`, `uuid`.
 
 ## Contributing
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+Contributions are welcome. Feel free to open a pull request.
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+MIT License. See [LICENSE](LICENSE).
 
 ## Support
 
-For issues, feature requests, or questions, please visit our [GitHub repository](https://github.com/ws5260/chat_toolkit).
+For issues, feature requests, or questions, visit the [GitHub repository](https://github.com/ws5260/chat_toolkit).
