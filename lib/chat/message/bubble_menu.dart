@@ -36,7 +36,10 @@ class BubbleMenuRequest {
 /// Return an empty list to suppress the menu for that message
 /// (e.g. while it is still sending).
 typedef BubbleMenuItemsBuilder =
-    List<BubbleMenuItem> Function(BuildContext context, BubbleMenuRequest request);
+    List<BubbleMenuItem> Function(
+      BuildContext context,
+      BubbleMenuRequest request,
+    );
 
 /// Presents a completely custom menu (bottom sheet, dialog, overlay, ...).
 ///
@@ -99,7 +102,11 @@ class BubbleMenuItem {
 
     return Row(
       mainAxisSize: MainAxisSize.min,
-      children: [icon!, const Gap(12), Flexible(child: text)],
+      children: [
+        icon!,
+        const Gap(12),
+        Flexible(child: text),
+      ],
     );
   }
 }
@@ -241,10 +248,13 @@ Future<BubbleMenuItem?> showBubbleMenu({
   ).context.findRenderObject();
   if (overlay is! RenderBox || !overlay.hasSize) return null;
 
-  // Anchor the menu to the pointer so a long press and a right click both open
-  // it where the user acted.
+  // globalPosition is in screen coordinates, while showMenu's position is in
+  // the Overlay's local coordinates. When the Overlay is scaled or offset (by a
+  // FittedBox, for example) the two differ, so using it unconverted would place
+  // the menu away from the pointer.
+  final pointer = overlay.globalToLocal(request.globalPosition);
   final position = RelativeRect.fromRect(
-    Rect.fromPoints(request.globalPosition, request.globalPosition),
+    Rect.fromPoints(pointer, pointer),
     Offset.zero & overlay.size,
   );
 
