@@ -281,3 +281,27 @@ fix: Add missing filename configuration for web platform
 
 - 선택 기능입니다. `menuConfiguration`을 설정하지 않으면 말풍선 제스처는 기존과 동일합니다.
 - 우클릭은 의도적으로 트리거에서 제외했습니다. Flutter 웹에서는 브라우저 기본 컨텍스트 메뉴가 함께 뜨기 때문입니다. 마우스 버튼을 꾹 누르면 길게 누르기로 인식되므로 데스크톱·웹에서도 메뉴를 쓸 수 있습니다.
+
+---
+
+## 1.6.1
+
+### Fixed
+
+- **Bubble menu position**: the pointer's `globalPosition` is now converted into the Overlay's local coordinates before anchoring the menu. When the Overlay is transformed — scaled or offset by a `FittedBox`, a zoomed view, and so on — the menu used to open away from the bubble.
+
+### Changed
+
+- Internal formatting and readability cleanup in `bubble_menu.dart`. No public API change.
+
+---
+
+## 1.6.1 (한국어)
+
+### 수정
+
+- **말풍선 메뉴 위치**: 포인터의 `globalPosition`을 Overlay의 로컬 좌표로 변환한 뒤 메뉴를 띄우도록 고쳤습니다. `FittedBox`나 확대·축소된 화면처럼 Overlay에 변환이 걸려 있으면 메뉴가 말풍선에서 벗어난 위치에 열리던 문제가 있었습니다.
+
+### 변경
+
+- `bubble_menu.dart` 내부 포맷·가독성 정리. 공개 API 변경은 없습니다.
