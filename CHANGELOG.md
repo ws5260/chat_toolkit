@@ -305,3 +305,33 @@ fix: Add missing filename configuration for web platform
 ### 변경
 
 - `bubble_menu.dart` 내부 포맷·가독성 정리. 공개 API 변경은 없습니다.
+
+---
+
+## 1.6.2
+
+### Added
+
+- **API documentation**: every public class, field, method and typedef now has a dartdoc comment, so the API reference on pub.dev shows descriptions, default values and usage examples.
+  - Library overview with a quick-start example.
+  - Examples for `Chat`, `MessageElement` and `ChatController.dispatchMessage`.
+- Enabled the `public_member_api_docs` lint so new public members must be documented.
+
+### Changed
+
+- No code or public API changes.
+
+---
+
+## 1.6.2 (한국어)
+
+### 추가
+
+- **API 문서**: 모든 public 클래스, 필드, 메서드, typedef에 dartdoc 주석을 추가했습니다. 이제 pub.dev API 레퍼런스에 설명, 기본값, 사용 예제가 표시됩니다.
+  - 라이브러리 개요와 빠른 시작 예제.
+  - `Chat`, `MessageElement`, `ChatController.dispatchMessage` 예제.
+- `public_member_api_docs` lint를 활성화해 새 public 멤버에 주석이 없으면 경고가 뜨도록 했습니다.
+
+### 변경
+
+- 코드 동작과 공개 API 변경은 없습니다.
