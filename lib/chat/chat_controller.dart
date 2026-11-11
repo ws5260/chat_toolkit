@@ -6,30 +6,57 @@ import 'message/entity/failed_message_entry.dart';
 import 'message/entity/message.dart';
 import 'message/entity/message_group.dart';
 
+/// Sends [Message] to your backend.
+///
+/// Return the stored message (it replaces the local one, so it may carry a
+/// server id or timestamp) on success, or `null` on failure. Throw
+/// [MessageBlockedException] when the server refuses the message.
 typedef MessageDispatchCallback = Future<Message?> Function(Message);
+
+/// Orders two messages that have the same timestamp.
+///
+/// Returns a negative number if `a` comes first, a positive number if `b`
+/// comes first, or `0` to keep their order.
 typedef CustomSortCallback = int Function(Message a, Message b);
+
+/// Extra condition for adding [message] to an existing [group].
+///
+/// Checked in addition to [ChatController.defaultCanJoinGroup]; return
+/// `false` to start a new group.
 typedef AdditionalGroupCondition =
     bool Function(MessageGroup group, Message message);
 
 /// Thrown by a dispatch callback when the server refuses to send the message.
 class MessageBlockedException implements Exception {
-  /// The resultCode of the server's [ResponseCode].
+  /// The resultCode of the server's `ResponseCode`.
   final String code;
 
   /// Text to show the agent, used as-is from the server (already localized).
   final String message;
 
+  /// Creates a [MessageBlockedException].
   MessageBlockedException({required this.code, required this.message});
 
   @override
   String toString() => 'MessageBlockedException($code)';
 }
 
+/// Outcome of sending a message with [ChatController.dispatchMessage].
+///
+/// Also emitted on [ChatController.dispatchResultStream].
 class MessageDispatchResult {
+  /// The message that was sent.
   final Message message;
+
+  /// Whether the message was sent successfully.
   final bool isSuccess;
+
+  /// The error when [isSuccess] is `false`.
+  ///
+  /// A [MessageBlockedException] when the server refused the message.
   final Exception? exception;
 
+  /// Creates a [MessageDispatchResult].
   MessageDispatchResult({
     required this.message,
     required this.isSuccess,
@@ -37,19 +64,36 @@ class MessageDispatchResult {
   });
 }
 
+/// Holds the messages of a [Chat] and controls its scroll position.
+///
+/// Messages are kept as a list of [MessageGroup]s in chronological order.
+/// Use [setMessages] to load history, [appendMessages] to prepend older
+/// messages, [addMessage] for incoming messages and [dispatchMessage] to send
+/// a message with loading, failure and retry handling.
+///
+/// Since it extends [ScrollController], it can also be used to read or change
+/// the scroll position.
 class ChatController extends ScrollController {
   final StreamController<MessageDispatchResult> _dispatchResultController =
       StreamController.broadcast();
   final StreamController<Message> _newReceiveMessageController =
       StreamController.broadcast();
 
+  /// Emits the result of every [dispatchMessage] and [retryMessage] call.
   Stream<MessageDispatchResult> get dispatchResultStream =>
       _dispatchResultController.stream;
 
+  /// Emits receiver messages returned by a dispatch callback.
+  ///
+  /// Used by [Chat] to show [ChatConfiguration.newReceiveMessageNotificationBuilder].
   Stream<Message> get newReceiveMessageStream =>
       _newReceiveMessageController.stream;
 
   final List<MessageGroup> _messageGroups = [];
+
+  /// The current message groups, oldest first.
+  ///
+  /// Do not modify this list directly; use the methods of this controller.
   List<MessageGroup> get messageGroups => _messageGroups;
 
   final Map<String, FailedMessageEntry> _failedMessageEntries = {};
@@ -58,13 +102,20 @@ class ChatController extends ScrollController {
 
   bool _isCollapsed = false;
 
+  /// A flag you can use to track whether the chat is collapsed.
+  ///
+  /// Not used by the toolkit itself. Change it with [setIsCollapsed].
   bool get isCollapsed => _isCollapsed;
 
   late final bool _reverse;
+
+  /// Whether the list is laid out in reverse, with the newest messages at
+  /// scroll offset `0`.
   bool get reverse => _reverse;
 
   bool _isDisposed = false;
 
+  /// Whether [dispose] has been called.
   bool get isDisposed => _isDisposed;
 
   // Tie-breaker for messages that share the same timestamp.
@@ -97,11 +148,17 @@ class ChatController extends ScrollController {
     notifyListeners();
   }
 
+  /// Sets [isCollapsed] and notifies listeners.
   void setIsCollapsed(bool value) {
     _isCollapsed = value;
     notifyListeners();
   }
 
+  /// Replaces all messages with [messages].
+  ///
+  /// The messages are sorted by [Message.timestamp] (using the custom sort
+  /// callback for equal timestamps) and grouped. Messages with unparsable
+  /// timestamps are placed last. Note that [messages] is sorted in place.
   void setMessages(List<Message> messages) {
     _messageGroups.clear();
     _unreadMessageIds.clear();
@@ -136,6 +193,11 @@ class ChatController extends ScrollController {
     }
   }
 
+  /// Adds older [messages] to the beginning of the list, e.g. when loading
+  /// history from [Chat.onScrollToTop].
+  ///
+  /// Pass them newest first: each message is inserted before the current
+  /// oldest one.
   void appendMessages(List<Message> messages) {
     for (final message in messages) {
       if (message.isRead != null && message.isRead == false) {
@@ -169,6 +231,12 @@ class ChatController extends ScrollController {
     _notifyMessagesChanged();
   }
 
+  /// Creates a [ChatController].
+  ///
+  /// * [reverse] lays out the list in reverse so it starts at the newest
+  ///   message. Defaults to `false`.
+  /// * `customSortCallback` orders messages with the same timestamp.
+  /// * `additionalGroupCondition` adds a condition for grouping messages.
   ChatController({
     bool reverse = false,
     this._customSortCallback,
@@ -177,6 +245,8 @@ class ChatController extends ScrollController {
     _reverse = reverse;
   }
 
+  /// Whether [message] can join [group] by default: same side
+  /// ([Message.isSender]), same [Message.name] and same minute.
   bool defaultCanJoinGroup(MessageGroup group, Message message) {
     return group.isSender == message.isSender &&
         group.name == message.name &&
@@ -199,6 +269,7 @@ class ChatController extends ScrollController {
 
   static const double _bottomEpsilon = 2.0;
 
+  /// Jumps to the newest message.
   void scrollToBottom() {
     if (_isDisposed || !hasClients) return;
     final target = reverse ? 0.0 : position.maxScrollExtent;
@@ -233,6 +304,10 @@ class ChatController extends ScrollController {
   }
 
   /// Adds [message] to its group. A message whose id already exists is not added again.
+  /// Adds [message] after the newest message and returns its group.
+  ///
+  /// When a message with the same [Message.id] already exists, it is
+  /// replaced in place instead, which is useful for updating a message.
   MessageGroup addMessage(Message message) {
     if (message.id.isNotEmpty) {
       final existing = _groupOf(message.id);
@@ -305,6 +380,23 @@ class ChatController extends ScrollController {
     return messageGroup;
   }
 
+  /// Sends [message] through [onDispatch] and tracks its state in the list.
+  ///
+  /// The message is shown with a loading indicator right away. Then:
+  ///
+  /// * If [onDispatch] returns a message, it replaces the local one.
+  /// * If it returns `null`, the message is marked as failed and can be
+  ///   retried with [retryMessage].
+  /// * If it throws [MessageBlockedException], the message is removed.
+  ///
+  /// The result is returned and also emitted on [dispatchResultStream].
+  ///
+  /// ```dart
+  /// await controller.dispatchMessage(
+  ///   SenderMessage(name: 'Me', timestamp: DateTime.now().toIso8601String(), elements: [TextElement(text)]),
+  ///   onDispatch: (message) => api.send(message),
+  /// );
+  /// ```
   Future<MessageDispatchResult> dispatchMessage(
     Message message, {
     required MessageDispatchCallback onDispatch,
@@ -379,7 +471,8 @@ class ChatController extends ScrollController {
     return dispatchResult;
   }
 
-  // Registers a failed message loaded from history as retryable via [onDispatch].
+  /// Makes an already loaded failed message with [messageId] retryable
+  /// through [onDispatch], e.g. a failed message restored from local storage.
   void registerFailedMessage(
     String messageId,
     MessageDispatchCallback onDispatch,
@@ -397,6 +490,11 @@ class ChatController extends ScrollController {
     }
   }
 
+  /// Sends a failed [message] again with the callback it was originally
+  /// dispatched with.
+  ///
+  /// Emits a failed result on [dispatchResultStream] when the message is not
+  /// retryable.
   Future retryMessage(Message message) async {
     final entry = _failedMessageEntries[message.id];
     if (entry == null) {
@@ -430,6 +528,7 @@ class ChatController extends ScrollController {
     });
   }
 
+  /// Removes every message with the same [Message.id] as [message].
   void removeMessageEverywhere(Message message) {
     for (final group in _messageGroups.toList()) {
       group.messages.removeWhere((m) => m.id == message.id);
@@ -440,6 +539,7 @@ class ChatController extends ScrollController {
     _notifyMessagesChanged();
   }
 
+  /// Removes [message] from [group], and the group itself if it becomes empty.
   void removeMessageFromGroup(MessageGroup group, Message message) {
     group.messages.remove(message);
     if (group.messages.isEmpty) {
@@ -451,6 +551,8 @@ class ChatController extends ScrollController {
     _notifyMessagesChanged();
   }
 
+  /// Removes the message at [messageIndex] in [group], and the group itself
+  /// if it becomes empty.
   void removeMessageGroupAt(MessageGroup group, int messageIndex) {
     final message = group.messages.removeAt(messageIndex);
     if (group.messages.isEmpty) {
@@ -462,6 +564,9 @@ class ChatController extends ScrollController {
     _notifyMessagesChanged();
   }
 
+  /// Whether [message] and [other] were sent on different calendar days.
+  ///
+  /// Returns `false` when either timestamp cannot be parsed.
   bool isDateChangedComparedTo(Message message, Message other) {
     final thisDate = DateTime.tryParse(message.timestamp);
     final otherDate = DateTime.tryParse(other.timestamp);
@@ -473,6 +578,7 @@ class ChatController extends ScrollController {
         thisDate.year != otherDate.year;
   }
 
+  /// Whether [a] and [b] fall within the same minute.
   bool isSameMinute(DateTime a, DateTime b) {
     return a.year == b.year &&
         a.month == b.month &&
@@ -481,6 +587,8 @@ class ChatController extends ScrollController {
         a.minute == b.minute;
   }
 
+  /// Whether the list is scrolled within [threshold] logical pixels of the
+  /// newest message. Returns `true` when not attached to a scroll view.
   bool isAtBottom({double threshold = 20}) {
     if (!hasClients) return true;
     if (reverse) {
@@ -498,6 +606,7 @@ class ChatController extends ScrollController {
     return null;
   }
 
+  /// Whether a message with [messageId] is in the list.
   bool containsMessageId(String messageId) {
     for (final group in _messageGroups) {
       if (group.messages.any((m) => m.id == messageId)) {
@@ -507,6 +616,7 @@ class ChatController extends ScrollController {
     return false;
   }
 
+  /// Marks every unread message ([Message.isRead] is `false`) as read.
   void updateMessageAllRead() {
     if (_unreadMessageIds.isEmpty) return;
 

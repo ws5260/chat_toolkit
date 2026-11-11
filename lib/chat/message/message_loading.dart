@@ -3,7 +3,9 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:gap/gap.dart';
 
+/// Animated three-dot indicator shown while a message is being sent.
 class MessageLoading extends StatefulWidget {
+  /// Creates a [MessageLoading].
   const MessageLoading({super.key});
 
   @override

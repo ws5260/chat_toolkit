@@ -10,6 +10,7 @@ import 'entity/message.dart';
 ///
 /// Passed to every menu callback so a single builder can serve many bubbles.
 class BubbleMenuRequest {
+  /// Creates a [BubbleMenuRequest].
   const BubbleMenuRequest({
     required this.message,
     required this.isSender,
@@ -55,6 +56,7 @@ typedef BubbleMenuItemCallback =
 ///
 /// Provide either a [label] (optionally with an [icon]) or a fully custom [child].
 class BubbleMenuItem {
+  /// Creates a menu entry.
   const BubbleMenuItem({
     this.label,
     this.icon,
@@ -122,6 +124,7 @@ class BubbleMenuItem {
 ///
 /// A side without an items builder and without a handler has no menu.
 class BubbleMenuConfiguration {
+  /// Creates a [BubbleMenuConfiguration].
   const BubbleMenuConfiguration({
     this.senderItemsBuilder,
     this.receiverItemsBuilder,
@@ -194,6 +197,7 @@ class BubbleMenuConfiguration {
   bool isEnabledFor(bool isSender) =>
       handlerFor(isSender) != null || itemsBuilderFor(isSender) != null;
 
+  /// Returns a copy with the given fields replaced.
   BubbleMenuConfiguration copyWith({
     BubbleMenuItemsBuilder? senderItemsBuilder,
     BubbleMenuItemsBuilder? receiverItemsBuilder,
@@ -291,6 +295,7 @@ Future<BubbleMenuItem?> showBubbleMenu({
 /// Returns [child] untouched when the matching side has no menu configured, so
 /// bubbles without a menu keep their original gesture behavior.
 class BubbleMenuDetector extends StatelessWidget {
+  /// Creates a [BubbleMenuDetector].
   const BubbleMenuDetector({
     super.key,
     required this.child,
@@ -299,9 +304,16 @@ class BubbleMenuDetector extends StatelessWidget {
     this.configuration,
   });
 
+  /// The bubble to wrap.
   final Widget child;
+
+  /// The message shown by [child].
   final Message message;
+
+  /// Whether [child] is a sender bubble.
   final bool isSender;
+
+  /// Menu settings. `null` disables the menu.
   final BubbleMenuConfiguration? configuration;
 
   @override

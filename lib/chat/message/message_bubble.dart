@@ -4,7 +4,13 @@ import '../chat_configuration.dart';
 import 'entity/message.dart';
 import 'message_container.dart';
 
+/// Renders a single [Message] as a bubble, with its timestamp, read
+/// indicator, loading state and retry/delete actions.
+///
+/// [Chat] creates these for you; use it directly only when building a custom
+/// message list.
 class MessageBubble extends StatefulWidget {
+  /// Creates a bubble for [message].
   const MessageBubble(
     this.message, {
     super.key,
@@ -14,11 +20,25 @@ class MessageBubble extends StatefulWidget {
     required this.onDelete,
     required this.onRetry,
   });
+
+  /// The message to display.
   final Message message;
+
+  /// Custom profile widget. Currently unused.
   final Widget? customProfile;
+
+  /// Whether to show the timestamp beside the bubble.
+  ///
+  /// [Chat] shows it only for the last message of each group.
   final bool showTime;
+
+  /// Chat configuration supplying the bubble appearance.
   final ChatConfiguration configuration;
+
+  /// Called when the delete button of a failed message is tapped.
   final VoidCallback onDelete;
+
+  /// Called when the retry button of a failed message is tapped.
   final VoidCallback onRetry;
 
   @override

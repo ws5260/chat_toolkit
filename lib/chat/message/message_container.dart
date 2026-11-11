@@ -5,7 +5,10 @@ import 'entity/message.dart';
 import 'message_failed.dart';
 import 'message_loading.dart';
 
+/// Lays out a message bubble with its timestamp, read indicator, loading
+/// state, failed-message actions and context menu.
 class MessageContainer extends StatelessWidget {
+  /// Creates a [MessageContainer].
   const MessageContainer({
     super.key,
     required this.message,
@@ -21,19 +24,43 @@ class MessageContainer extends StatelessWidget {
     this.onRetry,
     this.menuConfiguration,
   });
+
+  /// Maximum width of the bubble.
   final double maxWidth;
+
+  /// The message to display.
   final Message message;
+
+  /// Whether the bubble is aligned to the leading side.
   final bool isBaseAxisStart;
+
+  /// Whether the message is a sender message.
   final bool isSender;
+
+  /// Whether to show the timestamp.
   final bool showTime;
+
+  /// Wraps the message content in a bubble.
   final Widget Function(BuildContext context, Widget child, bool isSender)
   bubbleBuilder;
+
+  /// Builds the timestamp.
   final Widget Function(BuildContext context, String timestamp) timeBuilder;
+
+  /// Builds the read indicator. `null` hides it.
   final Widget Function(BuildContext context, bool isRead)?
   readIndicatorBuilder;
+
+  /// Called when the delete button of a failed message is tapped.
   final VoidCallback? onDelete;
+
+  /// Called when the retry button of a failed message is tapped.
   final VoidCallback? onRetry;
+
+  /// Shown inside the bubble while the message is loading.
   final Widget loadingWidget;
+
+  /// Context-menu settings. `null` disables the menu.
   final BubbleMenuConfiguration? menuConfiguration;
 
   @override

@@ -1,18 +1,37 @@
 import 'package:flutter/material.dart';
 
+/// Called when the size of a [SizeDetectedWidget] changes.
 typedef SizeDetectedCallback = void Function(Size? oldSize, Size? newSize);
 
-enum SizeDetectedWidgetType { height, width, all }
+/// Which dimension changes a [SizeDetectedWidget] reports.
+enum SizeDetectedWidgetType {
+  /// Report only height changes.
+  height,
 
+  /// Report only width changes.
+  width,
+
+  /// Report any size change.
+  all,
+}
+
+/// Reports size changes of its [child].
 class SizeDetectedWidget extends StatefulWidget {
+  /// Creates a [SizeDetectedWidget].
   const SizeDetectedWidget({
     super.key,
     required this.onChange,
     required this.child,
     this.type = SizeDetectedWidgetType.all,
   });
+
+  /// Called with the old and new size when the size changes.
   final SizeDetectedCallback onChange;
+
+  /// Which dimension changes to report.
   final SizeDetectedWidgetType type;
+
+  /// The widget whose size is observed.
   final Widget child;
 
   @override

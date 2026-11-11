@@ -1,13 +1,18 @@
 import 'package:flutter/material.dart';
 
-// Retry/delete action pair attached to a bubble whose send failed.
+/// Retry/delete action pair attached to a bubble whose send failed.
 class MessageFailed extends StatelessWidget {
+  /// Creates a [MessageFailed].
   const MessageFailed({
     super.key,
     required this.onDelete,
     required this.onRetry,
   });
+
+  /// Called when the delete button is tapped.
   final Function()? onDelete;
+
+  /// Called when the retry button is tapped.
   final Function()? onRetry;
 
   static const double _iconSize = 20;

@@ -11,7 +11,23 @@ import 'package:flutter/material.dart';
 import 'package:gap/gap.dart';
 import 'package:super_sliver_list/super_sliver_list.dart';
 
+/// A chat view that shows the messages of a [ChatController].
+///
+/// Consecutive messages from the same author within the same minute are
+/// grouped under one profile, and a date separator is inserted when the day
+/// changes. An input field supplied by [customInputField] is placed below
+/// the list.
+///
+/// ```dart
+/// Chat(
+///   chatController: controller,
+///   configuration: const ChatConfiguration(senderAlignment: ChatAlignment.end),
+///   onScrollToTop: () => loadOlderMessages(),
+///   customInputField: (context, controller) => MyInputField(controller),
+/// )
+/// ```
 class Chat extends StatefulWidget {
+  /// Creates a chat view.
   const Chat({
     super.key,
     this.readOnly = false,
@@ -21,14 +37,41 @@ class Chat extends StatefulWidget {
     this.customInputField,
     this.onDeleteFailedMessage,
   });
+
+  /// Whether the chat is read-only.
+  ///
+  /// When `true`, [ChatConfiguration.readOnlyWidget] is shown instead of
+  /// [customInputField]. Defaults to `false`.
   final bool readOnly;
+
+  /// Controller that holds the messages and the scroll position.
+  ///
+  /// When `null`, an internal controller is created and disposed with this
+  /// widget. When provided, you are responsible for disposing it.
   final ChatController? chatController;
+
+  /// Appearance and behavior options.
   final ChatConfiguration configuration;
+
+  /// Builds the input field shown below the message list.
+  ///
+  /// Receives the [ChatController] so the field can send messages with
+  /// [ChatController.dispatchMessage]. When `null`, nothing is shown.
   final Widget Function(BuildContext, ChatController)? customInputField;
+
+  /// Called when the user reaches the oldest end of the list, typically to
+  /// load older messages.
+  ///
+  /// Also called when the messages do not fill the screen yet, repeatedly
+  /// after each update until they do. Calls are debounced while the returned
+  /// future is pending.
   final Future<void> Function()? onScrollToTop;
 
-  // Called when the X on a failed bubble is tapped. This widget knows neither the room id
-  // nor the API, so the host screen is responsible for the actual deletion.
+  /// Called when the delete button on a failed message is tapped.
+  ///
+  /// The chat knows nothing about your backend, so delete the message there
+  /// and return `true` to also remove it from the list, or `false` to keep
+  /// it. When `null`, the message is removed from the list immediately.
   final Future<bool> Function(Message)? onDeleteFailedMessage;
   @override
   State<Chat> createState() => _ChatState();

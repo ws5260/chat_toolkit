@@ -1,11 +1,23 @@
 import 'message.dart';
 
+/// Consecutive messages from the same author, shown under one profile.
+///
+/// By default, messages are grouped when they are on the same side, have the
+/// same [Message.name] and were sent within the same minute.
 class MessageGroup {
+  /// Messages in this group, oldest first.
   final List<Message> messages;
+
+  /// Author name shared by the messages.
   final String name;
+
+  /// Whether the messages are sender messages.
   final bool isSender;
+
+  /// Timestamp of the message that started the group.
   final String timestamp;
 
+  /// Creates a [MessageGroup].
   MessageGroup({
     required this.messages,
     required this.name,
@@ -13,6 +25,8 @@ class MessageGroup {
     required this.timestamp,
   });
 
+  /// Sorts [messages] by timestamp, placing failed and then loading sender
+  /// messages last.
   void sortMessages() {
     messages.sort((a, b) {
       if (a is SenderMessage && b is SenderMessage) {
