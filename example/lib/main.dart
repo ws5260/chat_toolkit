@@ -2,6 +2,8 @@ import 'package:chat_toolkit/chat_toolkit.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import 'rooms/room_list_screen.dart';
+
 void main() {
   runApp(const MyApp());
 }
@@ -17,7 +19,7 @@ class MyApp extends StatelessWidget {
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
         useMaterial3: true,
       ),
-      home: const ChatScreen(),
+      home: RoomListScreen(demoScreenBuilder: (_) => const ChatScreen()),
     );
   }
 }
@@ -58,13 +60,19 @@ class ChatScreen extends StatefulWidget {
 }
 
 class _ChatScreenState extends State<ChatScreen> {
-  late final ChatController chatController;
+  late ChatController chatController;
+
+  // The apps using this toolkit run it reversed (newest message at offset 0).
+  // Toggle from the app bar to check both layouts.
+  bool _reverse = true;
   final TextEditingController textController = TextEditingController();
+  // Kept on the input after sending (see _sendMessage and _buildInputField).
+  final FocusNode inputFocusNode = FocusNode();
 
   @override
   void initState() {
     super.initState();
-    chatController = ChatController();
+    chatController = ChatController(reverse: _reverse);
 
     // Seed initial messages
     _loadInitialMessages();
@@ -111,7 +119,50 @@ class _ChatScreenState extends State<ChatScreen> {
     });
   }
 
+  // Received messages go through dispatchMessage so that the chat's
+  // newReceiveMessageStream fires: within newMessageScrollThreshold of the
+  // bottom it scrolls down, otherwise newReceiveMessageNotificationBuilder
+  // shows a "new message" notification. addMessage does not fire it.
+  void _receiveMessage(Message message) {
+    chatController.dispatchMessage(
+      message,
+      onDispatch: (message) async => message,
+    );
+  }
+
+  int _simulatedCount = 0;
+
+  // ChatController.reverse is fixed at construction, so switching layouts
+  // means a new controller carrying over the current messages.
+  void _toggleReverse() {
+    final old = chatController;
+    final messages = [
+      for (final group in old.messageGroups) ...group.messages,
+    ];
+    setState(() {
+      _reverse = !_reverse;
+      chatController = ChatController(reverse: _reverse)..setMessages(messages);
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      old.dispose(); // after the old Chat is gone
+      chatController.scrollToBottom();
+    });
+  }
+
+  // Simulates a message pushed by the server (e.g. over a socket).
+  void _simulateIncomingMessage() {
+    _simulatedCount++;
+    _receiveMessage(ReceiverMessage(
+      id: 'incoming_${DateTime.now().microsecondsSinceEpoch}',
+      timestamp: DateTime.now().toIso8601String(),
+      name: '상담사',
+      elements: [TextMessageElement('수신 테스트 메시지 $_simulatedCount')],
+    ));
+  }
+
   void _sendMessage() {
+    // Clicking the send button moves focus to it on web/desktop; give it back to the input.
+    inputFocusNode.requestFocus();
     if (textController.text.trim().isEmpty) return;
 
     final message = SenderMessage(
@@ -148,10 +199,9 @@ class _ChatScreenState extends State<ChatScreen> {
           ],
         );
 
-        // Add the auto reply
+        // Deliver the auto reply as a received message
         WidgetsBinding.instance.addPostFrameCallback((_) {
-          chatController.addMessage(response);
-          chatController.scrollToBottom();
+          _receiveMessage(response);
         });
 
         return message.copyWith(isLoading: false);
@@ -164,6 +214,7 @@ class _ChatScreenState extends State<ChatScreen> {
   @override
   void dispose() {
     textController.dispose();
+    inputFocusNode.dispose();
     chatController.dispose();
     super.dispose();
   }
@@ -279,6 +330,18 @@ class _ChatScreenState extends State<ChatScreen> {
       appBar: AppBar(
         backgroundColor: Theme.of(context).colorScheme.inversePrimary,
         title: const Text('Chat Toolkit Demo'),
+        actions: [
+          TextButton.icon(
+            onPressed: _toggleReverse,
+            icon: const Icon(Icons.swap_vert),
+            label: Text('reverse: $_reverse'),
+          ),
+          IconButton(
+            tooltip: '메시지 수신 테스트',
+            icon: const Icon(Icons.mark_chat_unread_outlined),
+            onPressed: _simulateIncomingMessage,
+          ),
+        ],
       ),
       body: Column(
         children: [
@@ -288,14 +351,35 @@ class _ChatScreenState extends State<ChatScreen> {
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             child: const Text(
               '말풍선을 길게 누르면(터치·마우스 모두 꾹 누르기) 메뉴가 열립니다. '
+              '오른쪽 위 버튼으로 메시지 수신과 reverse 모드 전환을 테스트할 수 있습니다. '
               '보낸 메시지와 받은 메시지의 메뉴가 서로 다릅니다.',
               style: TextStyle(fontSize: 12),
             ),
           ),
           Expanded(
             child: Chat(
+              // A new key rebuilds Chat for the new controller.
+              key: ValueKey(chatController),
               chatController: chatController,
               configuration: ChatConfiguration(
+                // In the reversed layout, a few messages start at the top instead of the bottom.
+                messagesStartAtTop: true,
+                // New messages grow in from the bottom instead of popping in.
+                messageAppearAnimationDuration:
+                    const Duration(milliseconds: 250),
+                // Enables auto-scroll on received messages near the bottom and
+                // shows this notification when scrolled further up.
+                newReceiveMessageNotificationBuilder:
+                    (context, message, controller) {
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: ActionChip(
+                      avatar: const Icon(Icons.arrow_downward, size: 16),
+                      label: Text('새 메시지: ${message.name}'),
+                      onPressed: controller.scrollToBottom,
+                    ),
+                  );
+                },
                 bubbleConfiguration: BubbleConfiguration(
                   menuConfiguration: _bubbleMenu,
                   senderBubbleBuilder: (context, child) {
@@ -366,8 +450,11 @@ class _ChatScreenState extends State<ChatScreen> {
             Expanded(
               child: TextField(
                 controller: textController,
+                focusNode: inputFocusNode,
                 textInputAction: TextInputAction.send,
-                onSubmitted: (_) => _sendMessage(),
+                // With onEditingComplete set, pressing Enter no longer unfocuses the field
+                // (TextField unfocuses on submit only when it is null).
+                onEditingComplete: _sendMessage,
                 decoration: InputDecoration(
                   hintText: '메시지를 입력하세요',
                   contentPadding: const EdgeInsets.symmetric(

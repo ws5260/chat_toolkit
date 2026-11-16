@@ -228,6 +228,29 @@ class ChatConfiguration {
   /// Defaults to `EdgeInsets.symmetric(horizontal: 30)`.
   final EdgeInsets padding;
 
+  /// Duration of the entrance animation for newly added messages.
+  ///
+  /// A message added with [ChatController.addMessage] or
+  /// [ChatController.dispatchMessage] grows from zero height (pushing the
+  /// list smoothly), slides up and fades in. A new group animates as a whole,
+  /// including its profile. Messages loaded with [ChatController.setMessages]
+  /// or [ChatController.appendMessages] do not animate, and each message
+  /// animates at most once (not again when scrolled back into view).
+  ///
+  /// `null` (the default) disables the animation.
+  final Duration? messageAppearAnimationDuration;
+
+  /// Whether a reversed chat ([ChatController.reverse]) shows its messages from the top while they
+  /// do not fill the screen.
+  ///
+  /// A reversed list starts at the bottom, so two or three messages sit at the bottom with empty
+  /// space above them. With this set, the empty space goes below them instead, like a normal
+  /// list. Once the messages fill the screen nothing changes: the newest message stays at the
+  /// bottom and the reversed list keeps its behavior.
+  ///
+  /// Has no effect on a non-reversed chat, which already starts at the top. Defaults to `false`.
+  final bool messagesStartAtTop;
+
   /// Creates a [ChatConfiguration].
   const ChatConfiguration({
     this.senderAlignment = ChatAlignment.end,
@@ -238,6 +261,8 @@ class ChatConfiguration {
     this.dateSeparatorBuilder,
     this.dateSeparatorStyle,
     this.padding = const EdgeInsets.symmetric(horizontal: 30),
+    this.messageAppearAnimationDuration,
+    this.messagesStartAtTop = false,
   });
 
   /// Whether sender messages are on the leading side

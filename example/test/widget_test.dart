@@ -5,18 +5,25 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:example/main.dart';
 
+// The app opens on the room list; the original demo is one entry in it.
+Future<void> openDemo(WidgetTester tester) async {
+  await tester.pumpWidget(const MyApp());
+  await tester.pumpAndSettle();
+  await tester.scrollUntilVisible(find.text('기본 데모'), 200);
+  await tester.tap(find.text('기본 데모'));
+  await tester.pumpAndSettle();
+}
+
 void main() {
   testWidgets('shows the seeded conversation', (tester) async {
-    await tester.pumpWidget(const MyApp());
-    await tester.pumpAndSettle();
+    await openDemo(tester);
 
     expect(find.text('안녕하세요! 무엇을 도와드릴까요?'), findsOneWidget);
     expect(find.text('안녕하세요! 채팅 기능 테스트 중입니다.'), findsOneWidget);
   });
 
   testWidgets('long press opens a different menu per side', (tester) async {
-    await tester.pumpWidget(const MyApp());
-    await tester.pumpAndSettle();
+    await openDemo(tester);
 
     // Receiver bubble: long press.
     await tester.longPress(find.text('안녕하세요! 무엇을 도와드릴까요?'));
@@ -38,8 +45,7 @@ void main() {
   });
 
   testWidgets('deletes a message from the sender menu', (tester) async {
-    await tester.pumpWidget(const MyApp());
-    await tester.pumpAndSettle();
+    await openDemo(tester);
 
     await tester.longPress(find.text('안녕하세요! 채팅 기능 테스트 중입니다.'));
     await tester.pumpAndSettle();
@@ -51,8 +57,7 @@ void main() {
   });
 
   testWidgets('sends a message from the input field', (tester) async {
-    await tester.pumpWidget(const MyApp());
-    await tester.pumpAndSettle();
+    await openDemo(tester);
 
     await tester.enterText(find.byType(TextField), '테스트 메시지');
     await tester.tap(find.byIcon(Icons.send));

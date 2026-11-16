@@ -21,7 +21,7 @@ A customizable chat widget toolkit for Flutter. It gives you a ready-to-use chat
 | **Sending** | Async dispatch with result stream, retry for failed messages, blocked-message handling |
 | **Context menu** | Long press menu on bubbles, configured separately for sender and receiver |
 | **Grouping & sorting** | Automatic message grouping (customizable), tie-breaker sorting for identical timestamps |
-| **Scrolling** | New-message notification, load older messages, only visible groups are built |
+| **Scrolling** | New-message notification, load older messages, only visible groups are built, optional entrance animation |
 
 ## Installation
 
@@ -325,6 +325,8 @@ final controller = ChatController(
 | `newReceiveMessageNotificationBuilder` | Builder for the new-message notification |
 | `bubbleConfiguration` | Bubble appearance settings |
 | `readOnlyWidget` | Widget shown in read-only mode |
+| `messageAppearAnimationDuration` | Entrance animation for newly added messages (default: off) |
+| `messagesStartAtTop` | In a reversed chat, show a few messages from the top instead of the bottom (default: false) |
 
 ### BubbleConfiguration
 

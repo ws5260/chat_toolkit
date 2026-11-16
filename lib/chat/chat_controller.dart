@@ -100,6 +100,31 @@ class ChatController extends ScrollController {
 
   final Set<String> _unreadMessageIds = {};
 
+  // Ids of messages newly added by addMessage, with the time they were added, so [Chat] can play
+  // the entrance animation once (see ChatConfiguration.messageAppearAnimationDuration).
+  final Map<String, DateTime> _appearPendingIds = {};
+  bool _suppressAppear = false;
+
+  // A pending entry older than this is dropped: the message was not shown right away (e.g. the
+  // user was scrolled far up), so animating it later when scrolled into view would look odd.
+  static const Duration _appearWindow = Duration(seconds: 1);
+
+  void _markAppear(String messageId) {
+    if (_suppressAppear || messageId.isEmpty) return;
+    final now = DateTime.now();
+    _appearPendingIds.removeWhere((_, addedAt) => now.difference(addedAt) > _appearWindow);
+    _appearPendingIds[messageId] = now;
+  }
+
+  /// Whether the message with [messageId] was just added and should play its entrance
+  /// animation. Returns `true` at most once per added message.
+  ///
+  /// Called by [Chat] when it first builds the message.
+  bool takeAppearAnimation(String messageId) {
+    final addedAt = _appearPendingIds.remove(messageId);
+    return addedAt != null && DateTime.now().difference(addedAt) <= _appearWindow;
+  }
+
   bool _isCollapsed = false;
 
   /// A flag you can use to track whether the chat is collapsed.
@@ -162,9 +187,18 @@ class ChatController extends ScrollController {
   void setMessages(List<Message> messages) {
     _messageGroups.clear();
     _unreadMessageIds.clear();
-    messages.sort((a, b) {
-      final aDate = DateTime.tryParse(a.timestamp);
-      final bDate = DateTime.tryParse(b.timestamp);
+    _appearPendingIds.clear();
+
+    // Parse each timestamp once, not on every comparison.
+    final entries = [
+      for (final message in messages)
+        (message: message, date: DateTime.tryParse(message.timestamp)),
+    ];
+    entries.sort((ea, eb) {
+      final a = ea.message;
+      final b = eb.message;
+      final aDate = ea.date;
+      final bDate = eb.date;
 
       // Messages with unparsable timestamps sort last.
       if (aDate == null || bDate == null) {
@@ -187,10 +221,60 @@ class ChatController extends ScrollController {
       }
       return 0;
     });
-
-    for (final message in messages) {
-      addMessage(message);
+    for (int i = 0; i < entries.length; i++) {
+      messages[i] = entries[i].message;
     }
+
+    // addMessage re-positions failed messages on every call; keep that exact behavior when any
+    // are registered (rare during a full reload).
+    if (_failedMessageEntries.isNotEmpty) {
+      _suppressAppear = true; // loaded history, not new messages
+      try {
+        for (final message in messages) {
+          addMessage(message);
+        }
+      } finally {
+        _suppressAppear = false;
+      }
+      return;
+    }
+
+    // Group in a single pass over the sorted list. Equivalent to calling addMessage for each
+    // message, without its per-message duplicate scan over every group and per-message notify.
+    final positions = <String, ({MessageGroup group, int index})>{};
+    for (final message in messages) {
+      if (message.id.isNotEmpty) {
+        final existing = positions[message.id];
+        if (existing != null) {
+          // Same id seen before: replace it in place, as addMessage does.
+          existing.group.messages[existing.index] = message;
+          continue;
+        }
+      }
+      final MessageGroup group;
+      if (_messageGroups.isEmpty ||
+          !_canJoinGroup(_messageGroups.last, message)) {
+        group = MessageGroup(
+          name: message.name,
+          isSender: message.isSender,
+          timestamp: message.timestamp,
+          messages: [message],
+        );
+        _messageGroups.add(group);
+      } else {
+        group = _messageGroups.last;
+        group.messages.add(message);
+      }
+      if (message.id.isNotEmpty) {
+        positions[message.id] = (group: group, index: group.messages.length - 1);
+      }
+      if (message.isRead == false) {
+        _unreadMessageIds.add(message.id);
+      } else if (message.isRead == true) {
+        _unreadMessageIds.remove(message.id);
+      }
+    }
+    _notifyMessagesChanged();
   }
 
   /// Adds older [messages] to the beginning of the list, e.g. when loading
@@ -199,6 +283,7 @@ class ChatController extends ScrollController {
   /// Pass them newest first: each message is inserted before the current
   /// oldest one.
   void appendMessages(List<Message> messages) {
+    final groupCountBefore = _messageGroups.length;
     for (final message in messages) {
       if (message.isRead != null && message.isRead == false) {
         _unreadMessageIds.add(message.id);
@@ -228,7 +313,26 @@ class ChatController extends ScrollController {
         );
       }
     }
+    // In a normal list the older end is offset 0, so content added there pushes what the user is
+    // looking at downward. Chat shifts the offset by the added height in its next layout.
+    // (In a reversed list older messages are added at the far end and nothing moves.)
+    if (!_reverse && groupCountBefore > 0 && messages.isNotEmpty) {
+      _groupsPrepended = (_groupsPrepended ?? 0) + _messageGroups.length - groupCountBefore;
+    }
     _notifyMessagesChanged();
+  }
+
+  int? _groupsPrepended;
+
+  /// When older messages were just added by [appendMessages] to a normal (not reversed) list,
+  /// the number of groups added in front, so the visible groups can be kept in place;
+  /// otherwise `null`. Returns the value once.
+  ///
+  /// Called by [Chat] during layout.
+  int? takeGroupsPrepended() {
+    final value = _groupsPrepended;
+    _groupsPrepended = null;
+    return value;
   }
 
   /// Creates a [ChatController].
@@ -261,6 +365,7 @@ class ChatController extends ScrollController {
     _isDisposed = true;
     _messageGroups.clear();
     _unreadMessageIds.clear();
+    _appearPendingIds.clear();
     _dispatchResultController.close();
     _newReceiveMessageController.close();
     _messagesRevision.dispose();
@@ -275,6 +380,17 @@ class ChatController extends ScrollController {
     final target = reverse ? 0.0 : position.maxScrollExtent;
     if ((position.pixels - target).abs() <= _bottomEpsilon) return;
     jumpTo(target);
+  }
+
+  // Scrolls to a message that was just added. In a reversed list the bottom is offset 0, so one jump
+  // is enough. Otherwise the bottom is maxScrollExtent, which includes the new message only after
+  // the next layout: jump now (to the current bottom, so an entrance animation starting this frame
+  // sees the list at the bottom and follows it) and again after that layout.
+  void _scrollToBottomForNewMessage() {
+    scrollToBottom();
+    if (!_reverse) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => scrollToBottom());
+    }
   }
 
   /// Scrolls toward older messages by [offset].
@@ -319,6 +435,7 @@ class ChatController extends ScrollController {
       }
     }
     // _messages.add(message); _messages.sort((a, b) { if (a.isFailed == b.isFailed) return 0; if (a.is…
+    _markAppear(message.id);
     late final MessageGroup messageGroup;
     if (_messageGroups.isEmpty ||
         !_canJoinGroup(_messageGroups.last, message)) {
@@ -404,6 +521,10 @@ class ChatController extends ScrollController {
     final messageGroup = addMessage(
       message.copyWith(isLoading: true, isFailed: false),
     );
+    // Show the sent bubble right away, not only after onDispatch completes (a server round trip).
+    if (message.isSender) {
+      _scrollToBottomForNewMessage();
+    }
     late final MessageDispatchResult dispatchResult;
     late final Message? result;
 
@@ -460,10 +581,17 @@ class ChatController extends ScrollController {
         onDispatch: onDispatch,
       );
 
-      addMessage(message.copyWith(isLoading: false, isFailed: true));
+      // The bubble already appeared; re-adding it as failed is not a new message.
+      _suppressAppear = true;
+      try {
+        addMessage(message.copyWith(isLoading: false, isFailed: true));
+      } finally {
+        _suppressAppear = false;
+      }
     }
     if (message.isSender) {
-      scrollToBottom();
+      // The bubble changed from the loading indicator to its content (or to failed).
+      _scrollToBottomForNewMessage();
     }
     if (_dispatchResultController.isClosed) return dispatchResult;
     _dispatchResultController.add(dispatchResult);
