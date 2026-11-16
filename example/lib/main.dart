@@ -1,6 +1,20 @@
+import 'dart:developer' show Timeline;
+
 import 'package:chat_toolkit/chat_toolkit.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
+
+import 'rooms/room_list_screen.dart';
+
+/// Perf mode: `flutter run --profile --dart-define=PERF_SEED=10000`.
+/// Seeds N messages and runs load / receive / prepend scenarios, printing
+/// `[PERF]` lines. When 0 (default) the demo behaves as usual.
+const int _perfSeed = int.fromEnvironment('PERF_SEED');
+
+/// Perf mode options: `--dart-define=PERF_REVERSE=false`, `--dart-define=PERF_ANIMATION=false`.
+const bool _perfReverse = bool.fromEnvironment('PERF_REVERSE', defaultValue: true);
+const bool _perfAnimation = bool.fromEnvironment('PERF_ANIMATION', defaultValue: true);
 
 void main() {
   runApp(const MyApp());
@@ -17,7 +31,10 @@ class MyApp extends StatelessWidget {
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
         useMaterial3: true,
       ),
-      home: const ChatScreen(),
+      // Perf mode measures the single-room demo directly.
+      home: _perfSeed > 0
+          ? const ChatScreen()
+          : RoomListScreen(demoScreenBuilder: (_) => const ChatScreen()),
     );
   }
 }
@@ -58,16 +75,104 @@ class ChatScreen extends StatefulWidget {
 }
 
 class _ChatScreenState extends State<ChatScreen> {
-  late final ChatController chatController;
+  late ChatController chatController;
+
+  // The apps using this toolkit run it reversed (newest message at offset 0).
+  // Toggle from the app bar to check both layouts.
+  bool _reverse = _perfSeed > 0 ? _perfReverse : true;
   final TextEditingController textController = TextEditingController();
+  // Kept on the input after sending (see _sendMessage and _buildInputField).
+  final FocusNode inputFocusNode = FocusNode();
 
   @override
   void initState() {
     super.initState();
-    chatController = ChatController();
+    chatController = ChatController(reverse: _reverse);
+
+    if (_perfSeed > 0) {
+      _runPerfScenario(_perfSeed);
+      return;
+    }
 
     // Seed initial messages
     _loadInitialMessages();
+  }
+
+  // ---- Perf mode -----------------------------------------------------------
+
+  final List<FrameTiming> _frames = [];
+  void _onTimings(List<FrameTiming> timings) => _frames.addAll(timings);
+
+  List<Message> _perfMessages(int count, int startIndex) {
+    final base = DateTime(2026, 1, 1, 9);
+    return List<Message>.generate(count, (j) {
+      final i = startIndex + j;
+      final ts = base.add(Duration(seconds: 90 * i)).toIso8601String();
+      final elements = [TextMessageElement('perf message $i')];
+      return (i ~/ 5).isEven
+          ? SenderMessage(id: 'p$i', name: '나', timestamp: ts, elements: elements)
+          : ReceiverMessage(
+              id: 'p$i', name: '상담사', timestamp: ts, elements: elements);
+    });
+  }
+
+  void _reportFrames(String phase) {
+    final f = List<FrameTiming>.of(_frames);
+    _frames.clear();
+    if (f.isEmpty) {
+      debugPrint('[PERF] $phase frames: none');
+      return;
+    }
+    double ms(Duration d) => d.inMicroseconds / 1000;
+    final build = f.map((t) => ms(t.buildDuration)).toList()..sort();
+    final raster = f.map((t) => ms(t.rasterDuration)).toList()..sort();
+    final jank = f.where((t) => ms(t.totalSpan) > 16.7).length;
+    String fmt(double v) => v.toStringAsFixed(2);
+    debugPrint('[PERF] $phase frames=${f.length} '
+        'build median ${fmt(build[build.length ~/ 2])} / max ${fmt(build.last)} ms, '
+        'raster median ${fmt(raster[raster.length ~/ 2])} / max ${fmt(raster.last)} ms, '
+        'jank(>16.7ms)=$jank');
+  }
+
+  Future<void> _runPerfScenario(int n) async {
+    SchedulerBinding.instance.addTimingsCallback(_onTimings);
+
+    // 1. Initial load
+    final input = _perfMessages(n, 0)..shuffle();
+    final sw = Stopwatch()..start();
+    Timeline.timeSync('perf:setMessages', () => chatController.setMessages(input));
+    sw.stop();
+    debugPrint('[PERF] setMessages n=$n: ${sw.elapsedMicroseconds / 1000} ms');
+    WidgetsBinding.instance
+        .addPostFrameCallback((_) => chatController.scrollToBottom());
+    await Future<void>.delayed(const Duration(seconds: 3));
+    _reportFrames('initial load');
+
+    // 2. Receive 30 messages, one every 300 ms
+    for (var i = 0; i < 30; i++) {
+      Timeline.timeSync('perf:addMessage',
+          () => chatController.addMessage(_perfMessages(1, n + i).single));
+      await Future<void>.delayed(const Duration(milliseconds: 300));
+    }
+    await Future<void>.delayed(const Duration(seconds: 1));
+    _reportFrames('receive x30');
+
+    // 3. Prepend 5 older pages of 50
+    for (var p = 1; p <= 5; p++) {
+      final page = _perfMessages(50, -50 * p).reversed.toList();
+      final sw2 = Stopwatch()..start();
+      Timeline.timeSync(
+          'perf:appendMessages', () => chatController.appendMessages(page));
+      sw2.stop();
+      debugPrint('[PERF] appendMessages page $p (50): '
+          '${sw2.elapsedMicroseconds / 1000} ms');
+      await Future<void>.delayed(const Duration(milliseconds: 500));
+    }
+    await Future<void>.delayed(const Duration(seconds: 1));
+    _reportFrames('prepend x5');
+
+    SchedulerBinding.instance.removeTimingsCallback(_onTimings);
+    debugPrint('[PERF] done');
   }
 
   void _loadInitialMessages() {
@@ -111,7 +216,50 @@ class _ChatScreenState extends State<ChatScreen> {
     });
   }
 
+  // Received messages go through dispatchMessage so that the chat's
+  // newReceiveMessageStream fires: within newMessageScrollThreshold of the
+  // bottom it scrolls down, otherwise newReceiveMessageNotificationBuilder
+  // shows a "new message" notification. addMessage does not fire it.
+  void _receiveMessage(Message message) {
+    chatController.dispatchMessage(
+      message,
+      onDispatch: (message) async => message,
+    );
+  }
+
+  int _simulatedCount = 0;
+
+  // ChatController.reverse is fixed at construction, so switching layouts
+  // means a new controller carrying over the current messages.
+  void _toggleReverse() {
+    final old = chatController;
+    final messages = [
+      for (final group in old.messageGroups) ...group.messages,
+    ];
+    setState(() {
+      _reverse = !_reverse;
+      chatController = ChatController(reverse: _reverse)..setMessages(messages);
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      old.dispose(); // after the old Chat is gone
+      chatController.scrollToBottom();
+    });
+  }
+
+  // Simulates a message pushed by the server (e.g. over a socket).
+  void _simulateIncomingMessage() {
+    _simulatedCount++;
+    _receiveMessage(ReceiverMessage(
+      id: 'incoming_${DateTime.now().microsecondsSinceEpoch}',
+      timestamp: DateTime.now().toIso8601String(),
+      name: '상담사',
+      elements: [TextMessageElement('수신 테스트 메시지 $_simulatedCount')],
+    ));
+  }
+
   void _sendMessage() {
+    // Clicking the send button moves focus to it on web/desktop; give it back to the input.
+    inputFocusNode.requestFocus();
     if (textController.text.trim().isEmpty) return;
 
     final message = SenderMessage(
@@ -148,10 +296,9 @@ class _ChatScreenState extends State<ChatScreen> {
           ],
         );
 
-        // Add the auto reply
+        // Deliver the auto reply as a received message
         WidgetsBinding.instance.addPostFrameCallback((_) {
-          chatController.addMessage(response);
-          chatController.scrollToBottom();
+          _receiveMessage(response);
         });
 
         return message.copyWith(isLoading: false);
@@ -164,6 +311,7 @@ class _ChatScreenState extends State<ChatScreen> {
   @override
   void dispose() {
     textController.dispose();
+    inputFocusNode.dispose();
     chatController.dispose();
     super.dispose();
   }
@@ -279,6 +427,18 @@ class _ChatScreenState extends State<ChatScreen> {
       appBar: AppBar(
         backgroundColor: Theme.of(context).colorScheme.inversePrimary,
         title: const Text('Chat Toolkit Demo'),
+        actions: [
+          TextButton.icon(
+            onPressed: _toggleReverse,
+            icon: const Icon(Icons.swap_vert),
+            label: Text('reverse: $_reverse'),
+          ),
+          IconButton(
+            tooltip: '메시지 수신 테스트',
+            icon: const Icon(Icons.mark_chat_unread_outlined),
+            onPressed: _simulateIncomingMessage,
+          ),
+        ],
       ),
       body: Column(
         children: [
@@ -288,14 +448,36 @@ class _ChatScreenState extends State<ChatScreen> {
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             child: const Text(
               '말풍선을 길게 누르면(터치·마우스 모두 꾹 누르기) 메뉴가 열립니다. '
+              '오른쪽 위 버튼으로 메시지 수신과 reverse 모드 전환을 테스트할 수 있습니다. '
               '보낸 메시지와 받은 메시지의 메뉴가 서로 다릅니다.',
               style: TextStyle(fontSize: 12),
             ),
           ),
           Expanded(
             child: Chat(
+              // A new key rebuilds Chat for the new controller.
+              key: ValueKey(chatController),
               chatController: chatController,
               configuration: ChatConfiguration(
+                // In the reversed layout, a few messages start at the top instead of the bottom.
+                messagesStartAtTop: true,
+                // New messages grow in from the bottom instead of popping in.
+                messageAppearAnimationDuration: _perfSeed > 0 && !_perfAnimation
+                    ? null
+                    : const Duration(milliseconds: 250),
+                // Enables auto-scroll on received messages near the bottom and
+                // shows this notification when scrolled further up.
+                newReceiveMessageNotificationBuilder:
+                    (context, message, controller) {
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: ActionChip(
+                      avatar: const Icon(Icons.arrow_downward, size: 16),
+                      label: Text('새 메시지: ${message.name}'),
+                      onPressed: controller.scrollToBottom,
+                    ),
+                  );
+                },
                 bubbleConfiguration: BubbleConfiguration(
                   menuConfiguration: _bubbleMenu,
                   senderBubbleBuilder: (context, child) {
@@ -366,8 +548,11 @@ class _ChatScreenState extends State<ChatScreen> {
             Expanded(
               child: TextField(
                 controller: textController,
+                focusNode: inputFocusNode,
                 textInputAction: TextInputAction.send,
-                onSubmitted: (_) => _sendMessage(),
+                // With onEditingComplete set, pressing Enter no longer unfocuses the field
+                // (TextField unfocuses on submit only when it is null).
+                onEditingComplete: _sendMessage,
                 decoration: InputDecoration(
                   hintText: '메시지를 입력하세요',
                   contentPadding: const EdgeInsets.symmetric(
