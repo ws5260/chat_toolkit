@@ -30,7 +30,7 @@ Future<void> expectFocusKeptAfterSending(WidgetTester tester) async {
 
 void main() {
   testWidgets('basic demo keeps input focus after sending', (tester) async {
-    await tester.pumpWidget(const MyApp());
+    await tester.pumpWidget(const MyApp(home: AppHome.rooms));
     await tester.pumpAndSettle();
     await tester.scrollUntilVisible(find.text('기본 데모'), 200);
     await tester.tap(find.text('기본 데모'));
@@ -39,7 +39,7 @@ void main() {
   });
 
   testWidgets('room keeps input focus after sending', (tester) async {
-    await tester.pumpWidget(const MyApp());
+    await tester.pumpWidget(const MyApp(home: AppHome.rooms));
     await tester.pumpAndSettle();
     await tester.tap(find.text('보통 방'));
     await tester.pump(const Duration(seconds: 1));

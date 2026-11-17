@@ -11,7 +11,7 @@ void main() {
         tester.view.devicePixelRatio = 1;
         addTearDown(tester.view.reset);
 
-        await tester.pumpWidget(const MyApp());
+        await tester.pumpWidget(const MyApp(home: AppHome.rooms));
         await tester.pumpAndSettle();
         if (!reverse) {
           await tester.tap(find.byType(Switch));

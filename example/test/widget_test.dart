@@ -7,7 +7,7 @@ import 'package:example/main.dart';
 
 // The app opens on the room list; the original demo is one entry in it.
 Future<void> openDemo(WidgetTester tester) async {
-  await tester.pumpWidget(const MyApp());
+  await tester.pumpWidget(const MyApp(home: AppHome.rooms));
   await tester.pumpAndSettle();
   await tester.scrollUntilVisible(find.text('기본 데모'), 200);
   await tester.tap(find.text('기본 데모'));
