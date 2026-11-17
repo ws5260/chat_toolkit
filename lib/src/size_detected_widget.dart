@@ -16,6 +16,8 @@ enum SizeDetectedWidgetType {
 }
 
 /// Reports size changes of its [child].
+///
+/// Internal: not exported from `package:chat_toolkit/chat_toolkit.dart`.
 class SizeDetectedWidget extends StatefulWidget {
   /// Creates a [SizeDetectedWidget].
   const SizeDetectedWidget({

@@ -1,4 +1,5 @@
 import 'package:chat_toolkit/chat_toolkit.dart';
+import 'package:chat_toolkit/src/chat_controller.dart' show ChatControllerInternal;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -144,6 +145,34 @@ void main() {
     expect(find.textContaining('DIV '), findsNWidgets(3));
 
     await tester.pumpWidget(const SizedBox());
+    c.dispose();
+  });
+
+  test('messageGroups and MessageGroup.messages are read-only views', () {
+    final c = ChatController();
+    c.setMessages([_msg('a', DateTime(2026, 3, 1, 10))]);
+    final groups = c.messageGroups;
+    expect(() => groups.clear(), throwsUnsupportedError);
+    expect(() => groups.first.messages.clear(), throwsUnsupportedError);
+    // The views reflect later changes.
+    c.addMessage(_msg('b', DateTime(2026, 3, 1, 10)));
+    expect(groups.first.messages.map((m) => m.id), ['a', 'b']);
+    c.dispose();
+  });
+
+  test('retrying an unregistered message reports MessageNotRetryableException',
+      () async {
+    final c = ChatController();
+    final results = <MessageDispatchResult>[];
+    final sub = c.dispatchResultStream.listen(results.add);
+    await c.retryMessage(_msg('x', DateTime(2026, 3, 1, 10), sender: true));
+    await Future<void>.delayed(Duration.zero);
+    expect(results.single.isSuccess, isFalse);
+    expect(results.single.exception, isA<MessageNotRetryableException>());
+    expect(
+        (results.single.exception! as MessageNotRetryableException).messageId,
+        'x');
+    await sub.cancel();
     c.dispose();
   });
 }

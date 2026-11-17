@@ -7,6 +7,8 @@ import 'message_loading.dart';
 
 /// Lays out a message bubble with its timestamp, read indicator, loading
 /// state, failed-message actions and context menu.
+///
+/// Internal: not exported from `package:chat_toolkit/chat_toolkit.dart`.
 class MessageContainer extends StatelessWidget {
   /// Creates a [MessageContainer].
   const MessageContainer({

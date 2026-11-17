@@ -1,20 +1,55 @@
+import 'package:flutter/material.dart';
+import 'package:gap/gap.dart';
+import 'package:intl/intl.dart';
+
 import 'chat_controller.dart';
 import 'message/bubble_menu.dart';
 import 'message/entity/message.dart';
 import 'message/message_loading.dart';
-import 'package:flutter/material.dart';
-import 'package:gap/gap.dart';
-import 'package:intl/intl.dart';
 
 /// Appearance options for message bubbles, profiles and timestamps.
 ///
 /// Passed to [Chat] through [ChatConfiguration.bubbleConfiguration].
 /// Every builder is optional; when one is `null` a simple default is used.
+/// Sender and receiver bubbles and profiles are built separately, so each
+/// side can have its own look.
+///
+/// Each bubble shows its [Message.elements] inside the bubble builder, and a
+/// trailing area beside it with the [readIndicatorBuilder] (if set), the
+/// timestamp (on the last bubble of each [MessageGroup] only), or the retry
+/// and delete buttons of a failed message. The profile is shown once per
+/// group.
+///
+/// ```dart
+/// Chat(
+///   chatController: controller,
+///   configuration: ChatConfiguration(
+///     bubbleConfiguration: BubbleConfiguration(
+///       maxWidth: 280,
+///       receiverProfileBuilder: (context, name) => CircleAvatar(child: Text(name[0])),
+///       senderProfileBuilder: (context, name) => const SizedBox.shrink(),
+///       senderBubbleBuilder: (context, child) => DecoratedBox(
+///         decoration: BoxDecoration(
+///           color: Colors.blue.shade100,
+///           borderRadius: BorderRadius.circular(16),
+///         ),
+///         child: Padding(padding: const EdgeInsets.all(12), child: child),
+///       ),
+///       timeBuilder: (context, timestamp) =>
+///           Text(DateFormat.Hm().format(DateTime.parse(timestamp).toLocal())),
+///       readIndicatorBuilder: (context, isRead) =>
+///           Icon(isRead ? Icons.done_all : Icons.done, size: 14),
+///       timeStyle: const TextStyle(fontSize: 11, color: Colors.grey),
+///     ),
+///   ),
+/// )
+/// ```
 class BubbleConfiguration {
   /// Builds the profile shown next to a group of sender messages.
   ///
-  /// Receives the sender's [Message.name]. Defaults to a grey avatar icon
-  /// with the name below it.
+  /// Receives the sender's [Message.name] (the group's [MessageGroup.name]).
+  /// Defaults to a grey avatar icon with the name below it. Return
+  /// `SizedBox.shrink()` to hide the profile of your own messages.
   final Widget Function(BuildContext context, String name)? senderProfileBuilder;
 
   /// Builds the profile shown next to a group of receiver messages.
@@ -25,26 +60,34 @@ class BubbleConfiguration {
 
   /// Wraps the content of a sender message in a bubble.
   ///
-  /// [child] is the message content built from its [MessageElement]s.
-  /// Defaults to a light grey rounded container using [padding].
+  /// [child] is the message content built from its [MessageElement]s (or
+  /// [loadingWidget] while sending), already limited to [maxWidth]. Defaults
+  /// to a light grey rounded container using [padding].
   final Widget Function(BuildContext context, Widget child)? senderBubbleBuilder;
 
   /// Wraps the content of a receiver message in a bubble.
   ///
-  /// [child] is the message content built from its [MessageElement]s.
-  /// Defaults to a light blue rounded container using [padding].
+  /// [child] is the message content built from its [MessageElement]s (or
+  /// [loadingWidget] while loading), already limited to [maxWidth]. Defaults
+  /// to a light blue rounded container using [padding].
   final Widget Function(BuildContext context, Widget child)? receiverBubbleBuilder;
 
   /// Builds the timestamp shown beside the last bubble of a group.
   ///
-  /// Receives the raw [Message.timestamp] string. Defaults to the date
-  /// formatted as `yyyy.MM.dd`.
+  /// Receives the raw [Message.timestamp] string of that bubble's message.
+  /// Not shown while the message is loading or failed. Defaults to the date
+  /// formatted as `yyyy.MM.dd` (which throws a [FormatException] for a
+  /// timestamp [DateTime.parse] cannot parse); provide a builder to show the
+  /// time of day.
   final Widget Function(BuildContext context, String timestamp)? timeBuilder;
 
   /// Builds a read/unread indicator beside a bubble.
   ///
-  /// Only shown for messages whose [Message.isRead] is not `null`.
+  /// Called with [Message.isRead] for every bubble whose [Message.isRead] is
+  /// not `null` (not only the last of a group), except while the message is
+  /// loading or failed. Shown above the timestamp when both are present.
   /// When `null`, no indicator is shown.
+  /// [ChatController.updateMessageAllRead] marks unread messages as read.
   final Widget Function(BuildContext context, bool isRead)? readIndicatorBuilder;
 
   /// Widget shown inside a bubble while its message is being sent
@@ -74,8 +117,10 @@ class BubbleConfiguration {
   /// Also applied as the [DefaultTextStyle] of a custom [timeBuilder].
   final TextStyle? timeStyle;
 
-  /// Context menu opened by a long press or a right click on a bubble.
-  /// Sender and receiver menus are configured separately. `null` disables it.
+  /// Context menu opened by a long press on a bubble.
+  ///
+  /// Sender and receiver menus are configured separately. `null` (the
+  /// default) disables it. See [BubbleMenuConfiguration].
   final BubbleMenuConfiguration? menuConfiguration;
 
   /// Creates a [BubbleConfiguration].
@@ -97,6 +142,9 @@ class BubbleConfiguration {
 
   /// Builds the profile for a group, using [senderProfileBuilder] or
   /// [receiverProfileBuilder] depending on [isSender], or the default profile.
+  ///
+  /// Called by [Chat]; apps rarely need to call it. A custom builder is
+  /// wrapped in a [DefaultTextStyle] of [profileNameStyle] when that is set.
   Widget buildProfile(BuildContext context, String name, bool isSender) {
     final profileBuilder = isSender ? senderProfileBuilder : receiverProfileBuilder;
 
@@ -124,6 +172,8 @@ class BubbleConfiguration {
 
   /// Wraps [child] in a bubble, using [senderBubbleBuilder] or
   /// [receiverBubbleBuilder] depending on [isSender], or the default bubble.
+  ///
+  /// Called by [Chat]; apps rarely need to call it.
   Widget buildBubble(BuildContext context, Widget child, bool isSender) {
     if (isSender) {
       return senderBubbleBuilder?.call(context, child) ??
@@ -157,6 +207,9 @@ class BubbleConfiguration {
   }
 
   /// Builds the timestamp widget with [timeBuilder] or the default format.
+  ///
+  /// Called by [Chat]; apps rarely need to call it. A custom builder is
+  /// wrapped in a [DefaultTextStyle] of [timeStyle] when that is set.
   Widget buildTime(BuildContext context, String timestamp) {
     if (timeBuilder != null) {
       if (timeStyle == null) {
@@ -179,7 +232,31 @@ enum ChatAlignment {
 
 /// Visual and behavioral options for the chat UI.
 ///
-/// Passed to [Chat.configuration].
+/// Passed to [Chat.configuration]. Bubble-level appearance (bubbles,
+/// profiles, timestamps, context menu) lives in [bubbleConfiguration]; this
+/// class covers the list as a whole: which side messages are on, date
+/// separators, the "new message" notification, the read-only banner,
+/// padding and the entrance animation.
+///
+/// ```dart
+/// Chat(
+///   chatController: controller,
+///   configuration: ChatConfiguration(
+///     senderAlignment: ChatAlignment.end,
+///     padding: const EdgeInsets.symmetric(horizontal: 16),
+///     messageAppearAnimationDuration: const Duration(milliseconds: 250),
+///     dateSeparatorBuilder: (context, timestamp) => Center(
+///       child: Text(DateFormat.yMMMd().format(DateTime.parse(timestamp))),
+///     ),
+///     newReceiveMessageNotificationBuilder: (context, message, controller) =>
+///         TextButton(
+///           onPressed: controller.scrollToBottom,
+///           child: Text('New message from ${message.name}'),
+///         ),
+///     bubbleConfiguration: const BubbleConfiguration(maxWidth: 280),
+///   ),
+/// )
+/// ```
 class ChatConfiguration {
   /// Side on which sender messages ([SenderMessage]) are shown.
   ///
@@ -193,14 +270,27 @@ class ChatConfiguration {
   /// Receives the new message and the [ChatController] (e.g. to call
   /// [ChatController.scrollToBottom] on tap). When the user is within
   /// [newMessageScrollThreshold] of the bottom, the chat scrolls down
-  /// automatically instead. When `null`, this feature is disabled.
+  /// automatically instead. The notification is hidden once the user
+  /// scrolls back within that distance.
+  ///
+  /// Only messages emitted on [ChatController.newReceiveMessageStream]
+  /// trigger it, that is [ReceiverMessage]s returned by the callback of
+  /// [ChatController.dispatchMessage]; messages added with
+  /// [ChatController.addMessage] do not.
+  ///
+  /// When `null`, this feature, including the auto-scroll, is disabled.
+  /// [Chat] decides whether to listen when it is first built, so switching
+  /// between `null` and a builder later has no effect.
   final Widget Function(BuildContext, Message, ChatController)?
   newReceiveMessageNotificationBuilder;
 
   /// Builds the separator shown between messages from different days.
   ///
   /// Receives the raw [Message.timestamp] of the first message of the new
-  /// day. Defaults to a divider with the date formatted as `yyyy.MM.dd`.
+  /// day. A separator is also shown above the oldest loaded group. Days are
+  /// compared on the parsed [DateTime] values as given (no time zone
+  /// conversion). Defaults to a divider with the date formatted as
+  /// `yyyy.MM.dd`.
   final Widget Function(BuildContext, String)? dateSeparatorBuilder;
 
   /// Widget shown in place of the input field when [Chat.readOnly] is `true`.
@@ -211,8 +301,9 @@ class ChatConfiguration {
   /// Appearance options for bubbles, profiles and timestamps.
   final BubbleConfiguration bubbleConfiguration;
 
-  /// Distance in logical pixels from the bottom within which the chat
-  /// auto-scrolls to a newly received message.
+  /// Distance in logical pixels from the newest message within which the
+  /// chat auto-scrolls to a newly received message, instead of showing the
+  /// notification.
   ///
   /// Only used together with [newReceiveMessageNotificationBuilder].
   /// Defaults to `300`.
@@ -264,9 +355,15 @@ class ChatConfiguration {
 
   /// Whether sender messages are on the leading side
   /// ([senderAlignment] is [ChatAlignment.start]).
+  ///
+  /// Used by the toolkit's layout; apps can read [senderAlignment] instead.
   bool get isPrevProfile => senderAlignment == ChatAlignment.start;
 
   /// Builds the date separator with [dateSeparatorBuilder] or the default one.
+  ///
+  /// Called by [Chat]; apps rarely need to call it. A custom builder is
+  /// wrapped in a [DefaultTextStyle] of [dateSeparatorStyle] when that is
+  /// set.
   Widget buildDateDivider(BuildContext context, String timestamp) {
     if (dateSeparatorBuilder != null) {
       if (dateSeparatorStyle == null) {

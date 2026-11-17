@@ -3,6 +3,20 @@ include: package:flutter_lints/flutter.yaml
 # Additional information about this file can be found at
 # https://dart.dev/guides/language/analysis-options
 
+analyzer:
+  exclude:
+    - build/**
+    - example/build/**
+
 linter:
   rules:
     - public_member_api_docs
+    - implementation_imports
+    - library_private_types_in_public_api
+    - prefer_final_fields
+    - avoid_returning_null_for_void
+    - unawaited_futures
+    - directives_ordering
+    - always_declare_return_types
+    - type_annotate_public_apis
+    - prefer_const_constructors_in_immutables

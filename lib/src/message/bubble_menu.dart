@@ -8,7 +8,9 @@ import 'entity/message.dart';
 
 /// Information about the bubble a context menu was requested for.
 ///
-/// Passed to every menu callback so a single builder can serve many bubbles.
+/// Passed to every menu callback ([BubbleMenuItemsBuilder],
+/// [BubbleMenuHandler] and [BubbleMenuItemCallback]) so a single builder can
+/// serve many bubbles. Created by the toolkit when a bubble is long-pressed.
 class BubbleMenuRequest {
   /// Creates a [BubbleMenuRequest].
   const BubbleMenuRequest({
@@ -18,14 +20,19 @@ class BubbleMenuRequest {
     required this.bubbleRect,
   });
 
-  /// The message the menu was opened for.
+  /// The message the menu was opened for, as it was when the menu opened.
+  ///
+  /// It may be loading or failed (see [Message.isLoading] and
+  /// [Message.isFailed]); check those to offer different entries. Pass it to
+  /// [ChatController.retryMessage] or [ChatController.removeMessageEverywhere]
+  /// to act on it.
   final Message message;
 
   /// `true` for a sender bubble, `false` for a receiver bubble.
   final bool isSender;
 
-  /// Global position of the pointer that opened the menu
-  /// (the finger for a long press, the cursor for a right click).
+  /// Global position of the pointer that opened the menu (the finger, or the
+  /// mouse cursor for a held mouse button).
   final Offset globalPosition;
 
   /// Global bounds of the bubble, useful for anchoring a custom menu to it.
@@ -34,8 +41,9 @@ class BubbleMenuRequest {
 
 /// Builds the entries of the default context menu for one bubble.
 ///
-/// Return an empty list to suppress the menu for that message
-/// (e.g. while it is still sending).
+/// Called each time the menu is opened, so the entries can depend on
+/// [BubbleMenuRequest.message]. Return an empty list to suppress the menu
+/// for that message (e.g. while it is still sending).
 typedef BubbleMenuItemsBuilder =
     List<BubbleMenuItem> Function(
       BuildContext context,
@@ -44,17 +52,44 @@ typedef BubbleMenuItemsBuilder =
 
 /// Presents a completely custom menu (bottom sheet, dialog, overlay, ...).
 ///
-/// When provided it replaces the default popup menu for that side.
+/// When provided it replaces the default popup menu for that side; the items
+/// builder of that side is then not used. [BuildContext] is the bubble's
+/// context, and [BubbleMenuRequest.bubbleRect] and
+/// [BubbleMenuRequest.globalPosition] can anchor your UI to the bubble.
+///
+/// ```dart
+/// BubbleMenuConfiguration(
+///   receiverMenuHandler: (context, request) async {
+///     await showModalBottomSheet<void>(
+///       context: context,
+///       builder: (context) => MyMenuSheet(message: request.message),
+///     );
+///   },
+/// )
+/// ```
 typedef BubbleMenuHandler =
     Future<void> Function(BuildContext context, BubbleMenuRequest request);
 
 /// Called when a [BubbleMenuItem] is chosen.
+///
+/// Receives the bubble's [BuildContext] (not the closed menu's) and the
+/// request the menu was opened with.
 typedef BubbleMenuItemCallback =
     void Function(BuildContext context, BubbleMenuRequest request);
 
 /// A single entry of the default bubble context menu.
 ///
-/// Provide either a [label] (optionally with an [icon]) or a fully custom [child].
+/// Provide either a [label] (optionally with an [icon]) or a fully custom
+/// [child]; providing neither fails an assertion. Returned by a
+/// [BubbleMenuItemsBuilder] and shown as a Material popup menu entry.
+///
+/// ```dart
+/// BubbleMenuItem(
+///   label: 'Copy',
+///   icon: const Icon(Icons.copy, size: 18),
+///   onSelected: (context, request) => copyToClipboard(request.message),
+/// )
+/// ```
 class BubbleMenuItem {
   /// Creates a menu entry.
   const BubbleMenuItem({
@@ -81,21 +116,28 @@ class BubbleMenuItem {
   final Widget? child;
 
   /// Called after the menu closes and this entry was chosen.
+  ///
+  /// Not called if the bubble was removed from the tree in the meantime.
   final BubbleMenuItemCallback? onSelected;
 
-  /// Whether the entry can be chosen.
+  /// Whether the entry can be chosen. A disabled entry is shown greyed out.
+  ///
+  /// Defaults to `true`.
   final bool enabled;
 
   /// Text style applied to [label].
   final TextStyle? textStyle;
 
-  /// Height of the entry.
+  /// Minimum height of the entry. Defaults to [kMinInteractiveDimension].
   final double height;
 
-  /// Padding of the entry.
+  /// Padding of the entry. When `null`, the Material default is used.
   final EdgeInsets? padding;
 
   /// Builds the widget shown inside the popup menu entry.
+  ///
+  /// Returns [child] when set, otherwise [label] with [icon] before it.
+  /// Called by the toolkit; apps rarely need to call it.
   Widget buildContent(BuildContext context) {
     if (child != null) return child!;
 
@@ -122,7 +164,41 @@ class BubbleMenuItem {
 /// desktop and web. Right click is deliberately not a trigger: on the web it
 /// would open the browser's own context menu at the same time.
 ///
-/// A side without an items builder and without a handler has no menu.
+/// A side without an items builder and without a handler has no menu. For
+/// each side, a handler ([senderMenuHandler], [receiverMenuHandler]) takes
+/// precedence over an items builder ([senderItemsBuilder],
+/// [receiverItemsBuilder]). The menu is available on every bubble, including
+/// loading and failed ones.
+///
+/// Set it on [BubbleConfiguration.menuConfiguration]:
+///
+/// ```dart
+/// BubbleConfiguration(
+///   menuConfiguration: BubbleMenuConfiguration(
+///     senderItemsBuilder: (context, request) => [
+///       BubbleMenuItem(
+///         label: 'Copy',
+///         icon: const Icon(Icons.copy, size: 18),
+///         onSelected: (context, request) => copyToClipboard(request.message),
+///       ),
+///       if (request.message.isFailed)
+///         BubbleMenuItem(
+///           label: 'Resend',
+///           onSelected: (context, request) => controller.retryMessage(request.message),
+///         ),
+///       BubbleMenuItem(
+///         label: 'Delete',
+///         textStyle: const TextStyle(color: Colors.red),
+///         onSelected: (context, request) =>
+///             controller.removeMessageEverywhere(request.message),
+///       ),
+///     ],
+///     receiverItemsBuilder: (context, request) => [
+///       BubbleMenuItem(label: 'Reply', onSelected: (context, request) => reply(request.message)),
+///     ],
+///   ),
+/// )
+/// ```
 class BubbleMenuConfiguration {
   /// Creates a [BubbleMenuConfiguration].
   const BubbleMenuConfiguration({
@@ -142,9 +218,13 @@ class BubbleMenuConfiguration {
   });
 
   /// Entries of the default menu for sender bubbles.
+  ///
+  /// Ignored when [senderMenuHandler] is set.
   final BubbleMenuItemsBuilder? senderItemsBuilder;
 
   /// Entries of the default menu for receiver bubbles.
+  ///
+  /// Ignored when [receiverMenuHandler] is set.
   final BubbleMenuItemsBuilder? receiverItemsBuilder;
 
   /// Custom presentation for sender bubbles. Replaces [senderItemsBuilder].
@@ -154,9 +234,15 @@ class BubbleMenuConfiguration {
   final BubbleMenuHandler? receiverMenuHandler;
 
   /// Open the menu on a long press. Defaults to `true`.
+  ///
+  /// The long press is the only trigger, so `false` disables the menu on
+  /// both sides while keeping the rest of the configuration.
   final bool enableLongPress;
 
   /// Vibrate when the menu opens. Defaults to `true`.
+  ///
+  /// Uses [HapticFeedback.mediumImpact]; it has no effect on platforms
+  /// without haptics.
   final bool enableHapticFeedback;
 
   /// Background color of the default menu.
@@ -182,22 +268,16 @@ class BubbleMenuConfiguration {
   /// [senderMenuHandler] / [receiverMenuHandler].
   final AnimationStyle? animationStyle;
 
-  /// Push the default menu onto the root navigator.
+  /// Push the default menu onto the root navigator. Defaults to `false`.
+  ///
+  /// Set it when the chat is inside a nested [Navigator] and the menu should
+  /// cover the whole app. Only affects the default menu, not a handler.
   final bool useRootNavigator;
 
-  /// Items builder for the given side.
-  BubbleMenuItemsBuilder? itemsBuilderFor(bool isSender) =>
-      isSender ? senderItemsBuilder : receiverItemsBuilder;
-
-  /// Custom handler for the given side.
-  BubbleMenuHandler? handlerFor(bool isSender) =>
-      isSender ? senderMenuHandler : receiverMenuHandler;
-
-  /// Whether the given side has a menu at all.
-  bool isEnabledFor(bool isSender) =>
-      handlerFor(isSender) != null || itemsBuilderFor(isSender) != null;
-
   /// Returns a copy with the given fields replaced.
+  ///
+  /// A field cannot be reset to `null` this way (passing `null` keeps the
+  /// current value); create a new configuration instead.
   BubbleMenuConfiguration copyWith({
     BubbleMenuItemsBuilder? senderItemsBuilder,
     BubbleMenuItemsBuilder? receiverItemsBuilder,
@@ -231,10 +311,29 @@ class BubbleMenuConfiguration {
   }
 }
 
+/// Toolkit-internal helpers on [BubbleMenuConfiguration].
+///
+/// Not exported from `package:chat_toolkit/chat_toolkit.dart`.
+extension BubbleMenuConfigurationInternal on BubbleMenuConfiguration {
+  /// Items builder for the given side.
+  BubbleMenuItemsBuilder? itemsBuilderFor(bool isSender) =>
+      isSender ? senderItemsBuilder : receiverItemsBuilder;
+
+  /// Custom handler for the given side.
+  BubbleMenuHandler? handlerFor(bool isSender) =>
+      isSender ? senderMenuHandler : receiverMenuHandler;
+
+  /// Whether the given side has a menu at all.
+  bool isEnabledFor(bool isSender) =>
+      handlerFor(isSender) != null || itemsBuilderFor(isSender) != null;
+}
+
 /// Shows the default popup menu for [request] at the pointer position.
 ///
 /// Returns the chosen entry, or `null` when the menu was dismissed, had no
 /// entries, or the side has no items builder.
+///
+/// Internal: not exported from `package:chat_toolkit/chat_toolkit.dart`.
 Future<BubbleMenuItem?> showBubbleMenu({
   required BuildContext context,
   required BubbleMenuRequest request,
@@ -294,6 +393,8 @@ Future<BubbleMenuItem?> showBubbleMenu({
 ///
 /// Returns [child] untouched when the matching side has no menu configured, so
 /// bubbles without a menu keep their original gesture behavior.
+///
+/// Internal: not exported from `package:chat_toolkit/chat_toolkit.dart`.
 class BubbleMenuDetector extends StatelessWidget {
   /// Creates a [BubbleMenuDetector].
   const BubbleMenuDetector({

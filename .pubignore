@@ -1,0 +1,40 @@
+# Pub ignores .gitignore in this directory once .pubignore exists,
+# so the relevant .gitignore entries are repeated here.
+
+# Miscellaneous
+*.class
+*.log
+*.pyc
+*.swp
+.DS_Store
+.atom/
+.buildlog/
+.history
+.svn/
+migrate_working_dir/
+
+# IntelliJ related
+*.iml
+*.ipr
+*.iws
+.idea/
+
+# Flutter/Dart/Pub related
+/pubspec.lock
+example/pubspec.lock
+**/doc/api/
+.dart_tool/
+build/
+example/build/
+example/.dart_tool/
+
+# Not part of the published package
+docs/
+test/perf/
+.github/
+example/android/
+example/ios/
+example/macos/
+example/linux/
+example/windows/
+example/web/

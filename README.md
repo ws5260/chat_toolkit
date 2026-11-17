@@ -205,7 +205,7 @@ Chat(
     senderAlignment: ChatAlignment.end,
     bubbleConfiguration: BubbleConfiguration(
       maxWidth: 280,
-      profileBuilder: (context, name) => CustomProfile(name),
+      receiverProfileBuilder: (context, name) => CustomProfile(name),
       senderBubbleBuilder: (context, child) => CustomBubble(child),
     ),
   ),
@@ -337,13 +337,23 @@ final controller = ChatController(
 
 ## API reference
 
+### Chat
+
+| Option | Description |
+| --- | --- |
+| `chatController` | Controller holding the messages (one is created if omitted) |
+| `configuration` | Appearance and behavior options (`ChatConfiguration`) |
+| `customInputField` | Builder for the input field shown below the messages |
+| `readOnly` | Hide the input field and show `ChatConfiguration.readOnlyWidget` |
+| `onScrollToTop` | Called when the user scrolls to the oldest message, e.g. to load older ones |
+| `onDeleteFailedMessage` | Called when the delete button of a failed message is tapped |
+
 ### ChatConfiguration
 
 | Option | Description |
 | --- | --- |
 | `senderAlignment` | Message alignment (start / end) |
 | `padding` | List padding (default: horizontal 30) |
-| `customInputField` | Custom input field widget |
 | `newReceiveMessageNotificationBuilder` | Builder for the new-message notification |
 | `bubbleConfiguration` | Bubble appearance settings |
 | `readOnlyWidget` | Widget shown in read-only mode |
@@ -354,7 +364,7 @@ final controller = ChatController(
 
 | Option | Description |
 | --- | --- |
-| `profileBuilder` | Profile widget builder |
+| `senderProfileBuilder` / `receiverProfileBuilder` | Profile widget builders, per side |
 | `senderBubbleBuilder` | Sender bubble builder |
 | `receiverBubbleBuilder` | Receiver bubble builder |
 | `timeBuilder` | Timestamp builder |

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
 /// Retry/delete action pair attached to a bubble whose send failed.
+///
+/// Internal: not exported from `package:chat_toolkit/chat_toolkit.dart`.
 class MessageFailed extends StatelessWidget {
   /// Creates a [MessageFailed].
   const MessageFailed({

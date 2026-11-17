@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:gap/gap.dart';
 
 /// Animated three-dot indicator shown while a message is being sent.
+///
+/// Internal: not exported from `package:chat_toolkit/chat_toolkit.dart`.
 class MessageLoading extends StatefulWidget {
   /// Creates a [MessageLoading].
   const MessageLoading({super.key});

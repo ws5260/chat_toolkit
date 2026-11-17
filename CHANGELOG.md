@@ -399,3 +399,29 @@ fix: Add missing filename configuration for web platform
 
 - `ChatController(reverse:)` 는 무시되고, `ChatController.reverse` 는 항상 `true` 를 돌려줍니다. 기존 코드가 깨지지 않도록 남겨 두었지만 다음 메이저 버전에서 없어지니 지워 주세요.
 - `ChatController.takeAppearAnimation`, `ChatController.takeGroupsPrepended` 는 이제 공개 API가 아닙니다. `Chat` 내부용이었습니다.
+
+## 2.1.0
+
+### Changed
+
+- Implementation moved to `lib/src/`. Import only `package:chat_toolkit/chat_toolkit.dart`.
+- Toolkit-internal APIs are no longer public: `MessageBubble`, `showBubbleMenu`, `BubbleMenuDetector` and several `ChatController` helpers. Unused `isCollapsed` / `setIsCollapsed` are removed.
+- `ChatController.messageGroups` and `MessageGroup.messages` are read-only.
+- `retryMessage` returns `Future<void>` and reports `MessageNotRetryableException`.
+
+### Added
+
+- `MessageGroup` is exported.
+- Improved API documentation.
+
+### 변경
+
+- 구현을 `lib/src/` 로 옮겼습니다. `package:chat_toolkit/chat_toolkit.dart` 만 import 해 주세요.
+- 툴킷 내부용 API를 비공개로 바꿨습니다: `MessageBubble`, `showBubbleMenu`, `BubbleMenuDetector`, `ChatController` 의 일부 헬퍼. 쓰이지 않던 `isCollapsed` / `setIsCollapsed` 는 지웠습니다.
+- `ChatController.messageGroups`, `MessageGroup.messages` 는 읽기 전용입니다.
+- `retryMessage` 는 `Future<void>` 를 돌려주고, `MessageNotRetryableException` 으로 실패를 알립니다.
+
+### 추가
+
+- `MessageGroup` 을 export 합니다.
+- API 문서를 보강했습니다.

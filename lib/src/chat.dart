@@ -1,34 +1,89 @@
 import 'dart:async';
 import 'dart:ui';
 
+import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
+import 'package:gap/gap.dart';
+import 'package:super_sliver_list/super_sliver_list.dart';
+
 import 'chat_configuration.dart';
 import 'chat_controller.dart';
 import 'message/entity/message.dart';
 import 'message/entity/message_group.dart';
 import 'message/message_bubble.dart';
 import 'size_detected_widget.dart';
-import 'package:flutter/material.dart';
-import 'package:flutter/rendering.dart';
-import 'package:gap/gap.dart';
-import 'package:super_sliver_list/super_sliver_list.dart';
 
 /// A chat view that shows the messages of a [ChatController].
 ///
 /// Consecutive messages from the same author within the same minute are
-/// grouped under one profile, and a date separator is inserted when the day
-/// changes. An input field supplied by [customInputField] is placed below
-/// the list.
+/// grouped under one profile (see [MessageGroup]), and a date separator is
+/// inserted when the day changes. The list is laid out from the newest
+/// message at the bottom, scrolls lazily, and rebuilds whenever the
+/// controller's messages change. An input field supplied by
+/// [customInputField] (or [ChatConfiguration.readOnlyWidget] when
+/// [readOnly]) is placed below the list.
+///
+/// [Chat] takes its height from its parent, so place it in a bounded box
+/// such as the body of a [Scaffold] or an [Expanded]. It handles the
+/// built-in interactions itself: the retry and delete buttons of failed
+/// messages (see [ChatController.retryMessage] and [onDeleteFailedMessage]),
+/// loading older messages ([onScrollToTop]), the bubble context menu
+/// ([BubbleConfiguration.menuConfiguration]) and the "new message"
+/// notification ([ChatConfiguration.newReceiveMessageNotificationBuilder]).
 ///
 /// ```dart
-/// Chat(
-///   chatController: controller,
-///   configuration: const ChatConfiguration(senderAlignment: ChatAlignment.end),
-///   onScrollToTop: () => loadOlderMessages(),
-///   customInputField: (context, controller) => MyInputField(controller),
-/// )
+/// class RoomScreen extends StatefulWidget {
+///   const RoomScreen({super.key});
+///
+///   @override
+///   State<RoomScreen> createState() => _RoomScreenState();
+/// }
+///
+/// class _RoomScreenState extends State<RoomScreen> {
+///   final controller = ChatController();
+///
+///   @override
+///   void initState() {
+///     super.initState();
+///     api.fetchLatest().then(controller.setMessages);
+///   }
+///
+///   @override
+///   void dispose() {
+///     controller.dispose(); // Chat does not dispose a controller you pass in.
+///     super.dispose();
+///   }
+///
+///   @override
+///   Widget build(BuildContext context) {
+///     return Scaffold(
+///       body: Chat(
+///         chatController: controller,
+///         configuration: const ChatConfiguration(senderAlignment: ChatAlignment.end),
+///         onScrollToTop: () async {
+///           controller.appendMessages(await api.fetchOlder());
+///         },
+///         customInputField: (context, controller) => MyInputField(
+///           onSend: (text) => controller.dispatchMessage(
+///             SenderMessage(
+///               name: 'Me',
+///               timestamp: DateTime.now().toIso8601String(),
+///               elements: [TextElement(text)],
+///             ),
+///             onDispatch: api.send,
+///           ),
+///         ),
+///       ),
+///     );
+///   }
+/// }
 /// ```
 class Chat extends StatefulWidget {
   /// Creates a chat view.
+  ///
+  /// All arguments are optional; without a [chatController] the chat manages
+  /// an internal controller that you cannot reach, so pass one to show
+  /// messages.
   const Chat({
     super.key,
     this.readOnly = false,
@@ -48,31 +103,78 @@ class Chat extends StatefulWidget {
   /// Controller that holds the messages and the scroll position.
   ///
   /// When `null`, an internal controller is created and disposed with this
-  /// widget. When provided, you are responsible for disposing it.
+  /// widget. When provided, you are responsible for disposing it, after this
+  /// widget is removed from the tree.
+  ///
+  /// The controller is read once, when the chat is first built; passing a
+  /// different controller to an existing [Chat] has no effect. Give the
+  /// [Chat] a new [Key] (e.g. `ValueKey(roomId)`) to switch controllers.
   final ChatController? chatController;
 
   /// Appearance and behavior options.
+  ///
+  /// See [ChatConfiguration] and [ChatConfiguration.bubbleConfiguration].
   final ChatConfiguration configuration;
 
   /// Builds the input field shown below the message list.
   ///
   /// Receives the [ChatController] so the field can send messages with
-  /// [ChatController.dispatchMessage]. When `null`, nothing is shown.
+  /// [ChatController.dispatchMessage]. When `null`, nothing is shown. Not
+  /// called while [readOnly] is `true`.
   final Widget Function(BuildContext, ChatController)? customInputField;
 
   /// Called when the user reaches the oldest end of the list, typically to
   /// load older messages.
   ///
-  /// Also called when the messages do not fill the screen yet, repeatedly
-  /// after each update until they do. Calls are debounced while the returned
-  /// future is pending.
+  /// Add the loaded messages with [ChatController.appendMessages]. Called
+  /// after a frame when the list is scrolled within 20 logical pixels of the
+  /// oldest message. Also called when the messages do not fill the screen
+  /// yet, again after each update until they do, so with an empty or short
+  /// history it is called right after the first build.
+  ///
+  /// Further calls are suppressed for about 100 ms after each call, or until
+  /// the returned future completes if that is sooner, so the callback may be
+  /// called again while a slow request is still pending. Guard against
+  /// overlapping requests, and stop loading when the history is exhausted:
+  ///
+  /// ```dart
+  /// var loading = false;
+  /// var hasMore = true;
+  ///
+  /// Chat(
+  ///   chatController: controller,
+  ///   onScrollToTop: () async {
+  ///     if (loading || !hasMore) return;
+  ///     loading = true;
+  ///     try {
+  ///       final older = await api.fetchOlder(); // newest first
+  ///       hasMore = older.isNotEmpty;
+  ///       controller.appendMessages(older);
+  ///     } finally {
+  ///       loading = false;
+  ///     }
+  ///   },
+  /// )
+  /// ```
   final Future<void> Function()? onScrollToTop;
 
   /// Called when the delete button on a failed message is tapped.
   ///
   /// The chat knows nothing about your backend, so delete the message there
   /// and return `true` to also remove it from the list, or `false` to keep
-  /// it. When `null`, the message is removed from the list immediately.
+  /// it. When `null`, the message is removed from the list immediately. A
+  /// removed message can no longer be retried with
+  /// [ChatController.retryMessage].
+  ///
+  /// ```dart
+  /// Chat(
+  ///   chatController: controller,
+  ///   onDeleteFailedMessage: (message) async {
+  ///     await localDb.deleteUnsent(message.id);
+  ///     return true;
+  ///   },
+  /// )
+  /// ```
   final Future<bool> Function(Message)? onDeleteFailedMessage;
   @override
   State<Chat> createState() => _ChatState();
