@@ -290,9 +290,9 @@ class _PlaygroundPageState extends State<PlaygroundPage> {
         receiverProfileBuilder: s.receiverProfile
             ? (context, name) => Padding(
                   padding: const EdgeInsets.only(bottom: 6),
-                  child: Row(mainAxisSize: MainAxisSize.min, children: [
+                  child: Column(mainAxisSize: MainAxisSize.min, children: [
                     _Avatar(name: name, size: 28),
-                    const SizedBox(width: 8),
+                    const SizedBox(height: 4),
                     Text(name,
                         style: const TextStyle(
                             fontSize: 13,
