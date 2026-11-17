@@ -17,7 +17,7 @@ Future<void> expectFocusKeptAfterSending(WidgetTester tester) async {
 
   // Send button.
   await tester.enterText(find.byType(TextField), 'second');
-  await tester.tap(find.byIcon(Icons.send));
+  await tester.tap(find.byWidgetPredicate((w) => w is Icon && (w.icon == Icons.send || w.icon == Icons.send_rounded)));
   await tester.pump();
   expect(inputHasFocus(tester), isTrue, reason: 'after the send button');
 

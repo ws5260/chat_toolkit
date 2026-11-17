@@ -1,6 +1,7 @@
 import 'package:chat_toolkit/chat_toolkit.dart';
 import 'package:flutter/material.dart';
 
+import '../site/site_theme.dart';
 import 'fake_chat_server.dart';
 
 /// A chat room that loads its messages from [FakeChatServer], the same way the apps using this
@@ -136,9 +137,11 @@ class _RoomChatScreenState extends State<RoomChatScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: Colors.white,
       appBar: AppBar(
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-        title: Text(widget.room.title),
+        title: Text(widget.room.title,
+            style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700)),
+        shape: const Border(bottom: BorderSide(color: SiteColors.grey100)),
         actions: [
           IconButton(
             tooltip: '메시지 수신 테스트',
@@ -168,6 +171,7 @@ class _RoomChatScreenState extends State<RoomChatScreen> {
                       messageAppearAnimationDuration: const Duration(
                         milliseconds: 250,
                       ),
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
                       newReceiveMessageNotificationBuilder:
                           (context, message, controller) {
                             return Padding(
@@ -182,6 +186,23 @@ class _RoomChatScreenState extends State<RoomChatScreen> {
                               ),
                             );
                           },
+                      bubbleConfiguration: BubbleConfiguration(
+                        maxWidth: 260,
+                        senderProfileBuilder: (context, name) =>
+                            const SizedBox.shrink(),
+                        senderBubbleBuilder: (context, child) =>
+                            _bubble(child, SiteColors.blue, Colors.white),
+                        receiverBubbleBuilder: (context, child) =>
+                            _bubble(child, SiteColors.grey100, SiteColors.grey900),
+                        timeBuilder: (context, timestamp) {
+                          final t = DateTime.parse(timestamp);
+                          return Text(
+                            '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}',
+                            style: const TextStyle(
+                                fontSize: 11, color: SiteColors.grey500),
+                          );
+                        },
+                      ),
                     ),
                     customInputField: (context, controller) =>
                         _buildInputField(),
@@ -211,6 +232,18 @@ class _RoomChatScreenState extends State<RoomChatScreen> {
     );
   }
 
+  Widget _bubble(Widget child, Color color, Color textColor) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        decoration: BoxDecoration(
+          color: color,
+          borderRadius: BorderRadius.circular(18),
+        ),
+        child: DefaultTextStyle.merge(
+          style: TextStyle(color: textColor, fontSize: 15, height: 1.45),
+          child: child,
+        ),
+      );
+
   // Live scroll state, to spot unexpected jumps while the room opens.
   Widget _buildDebugBar() {
     return ListenableBuilder(
@@ -224,7 +257,7 @@ class _RoomChatScreenState extends State<RoomChatScreen> {
         final fromBottom = widget.reverse ? pixels : max - pixels;
         return Container(
           width: double.infinity,
-          color: Colors.blueGrey.shade50,
+          color: SiteColors.grey50,
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
           child: Text(
             'reverse: ${widget.reverse}  ·  바닥까지 ${fromBottom.toStringAsFixed(0)}px  '
@@ -232,7 +265,8 @@ class _RoomChatScreenState extends State<RoomChatScreen> {
             '로드 $_loadedCount/${widget.room.totalMessages}건  ·  '
             'onScrollToTop $_onScrollToTopCalls회'
             '${_hasNoMoreMessage ? '  ·  끝까지 불러옴' : ''}',
-            style: const TextStyle(fontSize: 12, fontFamily: 'monospace'),
+            style: const TextStyle(
+                fontSize: 11, fontFamily: 'monospace', color: SiteColors.grey600),
           ),
         );
       },
@@ -249,10 +283,17 @@ class _RoomChatScreenState extends State<RoomChatScreen> {
               controller: _textController,
               focusNode: _inputFocusNode,
               textInputAction: TextInputAction.send,
-              decoration: const InputDecoration(
-                hintText: '메시지 입력',
-                border: OutlineInputBorder(),
+              decoration: InputDecoration(
+                hintText: '메시지를 입력해 주세요',
+                hintStyle: const TextStyle(color: SiteColors.grey400),
                 isDense: true,
+                filled: true,
+                fillColor: SiteColors.grey100,
+                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(999),
+                  borderSide: BorderSide.none,
+                ),
               ),
               // With onEditingComplete set, pressing Enter no longer unfocuses the field
               // (TextField unfocuses on submit only when it is null).
@@ -262,7 +303,7 @@ class _RoomChatScreenState extends State<RoomChatScreen> {
           const SizedBox(width: 8),
           IconButton.filled(
             onPressed: _sendMessage,
-            icon: const Icon(Icons.send),
+            icon: const Icon(Icons.send_rounded),
           ),
         ],
       ),

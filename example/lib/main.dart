@@ -2,50 +2,36 @@ import 'package:chat_toolkit/chat_toolkit.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-import 'playground/playground_screen.dart';
 import 'rooms/room_list_screen.dart';
+import 'site/site_shell.dart';
+import 'site/site_theme.dart';
 
 void main() {
   runApp(const MyApp());
 }
 
 /// First screen of the example app.
-enum AppHome { playground, rooms }
+enum AppHome { site, rooms }
 
 class MyApp extends StatelessWidget {
-  const MyApp({super.key, this.home = AppHome.playground});
+  const MyApp({super.key, this.home = AppHome.site});
 
-  /// The playground is the web demo's landing page; [AppHome.rooms] opens the example list.
+  /// [AppHome.site] is the demo web site (playground, examples, guide); [AppHome.rooms] opens
+  /// the plain example list.
   final AppHome home;
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'chat_toolkit playground',
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
-        useMaterial3: true,
-      ),
+      title: 'chat_toolkit',
+      debugShowCheckedModeBanner: false,
+      theme: buildSiteTheme(),
       home: switch (home) {
-        AppHome.playground => Builder(
-            builder: (context) => PlaygroundScreen(
-              onOpenExamples: () => Navigator.of(context).push(MaterialPageRoute(
-                builder: (_) => const _ExampleList(),
-              )),
-            ),
-          ),
-        AppHome.rooms => const _ExampleList(),
+        AppHome.site => SiteShell(demoScreenBuilder: (_) => const ChatScreen()),
+        AppHome.rooms => RoomListScreen(demoScreenBuilder: (_) => const ChatScreen()),
       },
     );
   }
-}
-
-class _ExampleList extends StatelessWidget {
-  const _ExampleList();
-
-  @override
-  Widget build(BuildContext context) =>
-      RoomListScreen(demoScreenBuilder: (_) => const ChatScreen());
 }
 
 // Minimal text message element implementation

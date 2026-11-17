@@ -37,6 +37,7 @@ dependencies:
   cupertino_icons: ^1.0.8
   chat_toolkit:
     path: ../
+  url_launcher: ^6.3.3
 
 dev_dependencies:
   flutter_test:
