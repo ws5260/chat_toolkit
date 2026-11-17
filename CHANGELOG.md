@@ -342,27 +342,20 @@ fix: Add missing filename configuration for web platform
 
 ### Added
 
-- **Message entrance animation**: `ChatConfiguration(messageAppearAnimationDuration: ...)`. A message added with `addMessage` or `dispatchMessage` grows from zero height (the list moves smoothly instead of jumping), slides up and fades in. A new group animates with its profile. Messages loaded with `setMessages` / `appendMessages` do not animate, and each message animates at most once. Off by default (`null`).
-- **Start at the top in a reversed chat**: `ChatConfiguration(messagesStartAtTop: true)`. With `ChatController(reverse: true)`, a few messages are shown from the top instead of sitting at the bottom; once they fill the screen nothing changes. No effect on a non-reversed chat. Defaults to `false`.
+- **Entrance animation**: with `ChatConfiguration(messageAppearAnimationDuration: Duration(milliseconds: 250))`, new messages slide up and fade in instead of popping in. Only messages added with `addMessage` or `dispatchMessage` animate; messages loaded with `setMessages` or `appendMessages` do not. Off by default.
+- **Few messages start at the top**: `ChatConfiguration(messagesStartAtTop: true)`. In a reversed chat, two or three messages sit at the bottom of an empty screen; with this option they start at the top instead. Off by default.
 
-### Changed
+### Improved
 
-- **Faster initial load**: `setMessages` parses each timestamp once and groups messages in a single pass, instead of parsing on every sort comparison and scanning all groups for every message. 10,000 messages: 753 ms → 39 ms (profile build).
-- **Faster message updates**: the date separator is computed only for groups being built, not for every group on each change. Receiving a message with 10,000 loaded: frame build 53 ms → 0.8 ms.
-- `setMessages` now notifies listeners once instead of once per message.
-- `dispatchMessage` scrolls to the bottom as soon as a sent message is added, not only after `onDispatch` completes.
+- Opening a chat with many messages is much faster: `setMessages` with 10,000 messages takes 39 ms instead of 753 ms.
+- Receiving a message in a long chat is much faster: 0.8 ms instead of 53 ms per frame with 10,000 messages loaded.
+- Sending a message scrolls to the bottom right away, without waiting for the server.
 
-### Fixed
+### Fixed (`reverse: false` only)
 
-- Non-reversed chat (`reverse: false`):
-  - Opening a room no longer calls `onScrollToTop` on the first frame (the list starts at offset 0 before it is scrolled to the bottom), which loaded an older page and left the view in the middle.
-  - Older messages added by `appendMessages` keep the visible messages in place. Previously the view jumped to the added messages and, still being at the top, loaded every remaining page in a row.
-  - Scrolling to a just-added message reaches the new bottom when sending, and while a message plays its entrance animation.
-
-### Notes
-
-- `ChatController.takeAppearAnimation` and `ChatController.takeGroupsPrepended` are used by `Chat` internally.
-- The example app now opens on a list of chat rooms that load their messages from a fake server (short room, paged rooms, late-loading images, slow server), with a `reverse` switch and a live scroll readout. The original demo is the last entry. The input keeps focus after sending.
+- Opening a chat no longer stops in the middle of the list.
+- Loading older messages no longer moves the view or loads every remaining page at once.
+- Sending a message scrolls all the way to the bottom.
 
 ---
 
@@ -370,27 +363,20 @@ fix: Add missing filename configuration for web platform
 
 ### 추가
 
-- **메시지 등장 애니메이션**: `ChatConfiguration(messageAppearAnimationDuration: ...)`. `addMessage` 나 `dispatchMessage` 로 추가된 메시지가 높이 0에서 커지며(목록이 툭 밀리지 않고 부드럽게 움직임) 아래에서 올라오고 서서히 나타납니다. 새 그룹은 프로필과 함께 등장합니다. `setMessages` / `appendMessages` 로 불러온 메시지는 애니메이션하지 않고, 각 메시지는 한 번만 재생됩니다. 기본값은 꺼짐(`null`)입니다.
-- **reverse 채팅에서 위에서부터 표시**: `ChatConfiguration(messagesStartAtTop: true)`. `ChatController(reverse: true)` 에서 메시지가 몇 개뿐일 때 아래에 붙지 않고 위에서부터 보입니다. 화면이 차면 기존과 같습니다. reverse 가 아닌 채팅에는 영향이 없습니다. 기본값은 `false` 입니다.
+- **등장 애니메이션**: `ChatConfiguration(messageAppearAnimationDuration: Duration(milliseconds: 250))` 을 주면 새 메시지가 툭 나타나지 않고 아래에서 올라오며 서서히 보여요. `addMessage`, `dispatchMessage` 로 추가한 메시지만 애니메이션하고, `setMessages`, `appendMessages` 로 불러온 메시지는 하지 않아요. 기본값은 꺼짐이에요.
+- **메시지가 적으면 위에서부터 표시**: `ChatConfiguration(messagesStartAtTop: true)`. reverse 채팅에서 메시지가 두세 개뿐이면 빈 화면 아래쪽에 붙어 있는데, 이 옵션을 켜면 위에서부터 보여요. 기본값은 꺼짐이에요.
 
-### 변경
+### 개선
 
-- **초기 로드 속도 개선**: `setMessages` 가 정렬 비교마다 타임스탬프를 파싱하고 메시지마다 전체 그룹을 탐색하던 것을, 타임스탬프를 한 번만 파싱하고 한 번의 순회로 그룹핑하도록 바꿨습니다. 메시지 1만 건: 753ms → 39ms (profile 빌드).
-- **메시지 변경 시 속도 개선**: 날짜 구분선을 변경 때마다 전체 그룹에 대해 계산하지 않고, 화면에 그려지는 그룹만 계산합니다. 1만 건 로드 상태에서 메시지 1건 수신 시 프레임 build: 53ms → 0.8ms.
-- `setMessages` 가 메시지마다가 아니라 한 번만 변경 알림을 보냅니다.
-- `dispatchMessage` 가 `onDispatch` 완료를 기다리지 않고, 보낸 메시지를 추가하자마자 바닥으로 스크롤합니다.
+- 메시지가 많은 채팅을 훨씬 빨리 열어요. 메시지 1만 건 `setMessages`: 753ms → 39ms.
+- 긴 채팅에서 메시지를 받을 때 훨씬 빨라요. 1만 건이 있을 때 한 프레임: 53ms → 0.8ms.
+- 메시지를 보내면 서버 응답을 기다리지 않고 바로 맨 아래로 스크롤해요.
 
-### 수정
+### 수정 (`reverse: false` 일 때만)
 
-- reverse 가 아닌 채팅(`reverse: false`):
-  - 채팅방을 열 때 첫 프레임에서 `onScrollToTop` 이 불리지 않습니다. 맨 아래로 스크롤하기 전 offset 0 상태를 맨 위 도착으로 잘못 판단해서 이전 페이지를 불러오고, 화면이 중간에 멈추던 문제입니다.
-  - `appendMessages` 로 이전 메시지를 붙여도 보던 메시지가 제자리에 유지됩니다. 전에는 붙은 메시지 쪽으로 화면이 밀리고, 여전히 맨 위로 판단되어 남은 페이지를 연달아 전부 불러왔습니다.
-  - 메시지를 보낼 때와 등장 애니메이션 중에 새 바닥까지 정확히 스크롤됩니다.
-
-### 참고
-
-- `ChatController.takeAppearAnimation`, `ChatController.takeGroupsPrepended` 는 `Chat` 내부에서 사용합니다.
-- 예제 앱의 첫 화면이 채팅방 목록으로 바뀌었습니다. 각 방은 가짜 서버에서 메시지를 불러오며(짧은 방, 페이지 로드, 늦게 로드되는 이미지, 느린 서버), `reverse` 스위치와 실시간 스크롤 상태 표시가 있습니다. 기존 데모는 목록 마지막 항목입니다. 메시지를 보낸 뒤에도 입력창 포커스가 유지됩니다.
+- 채팅방을 열면 목록 중간에서 멈추던 문제를 고쳤어요.
+- 이전 메시지를 불러올 때 화면이 밀리거나 남은 페이지를 한꺼번에 다 불러오던 문제를 고쳤어요.
+- 메시지를 보내면 맨 아래까지 정확히 스크롤돼요.
 
 ## 2.0.0
 
@@ -402,7 +388,7 @@ fix: Add missing filename configuration for web platform
 ### Deprecated
 
 - `ChatController(reverse:)` is ignored and `ChatController.reverse` always returns `true`. Both still compile so existing code keeps working; remove them, as they will be removed in a future major version.
-- `ChatController.takeGroupsPrepended` is removed (it was only used by `Chat`).
+- `ChatController.takeAppearAnimation` and `ChatController.takeGroupsPrepended` are no longer public. They were only meant for `Chat`.
 
 ### 변경
 
@@ -412,4 +398,4 @@ fix: Add missing filename configuration for web platform
 ### 지원 중단 예정 (Deprecated)
 
 - `ChatController(reverse:)` 는 무시되고, `ChatController.reverse` 는 항상 `true` 를 돌려줍니다. 기존 코드가 깨지지 않도록 남겨 두었지만 다음 메이저 버전에서 없어지니 지워 주세요.
-- `ChatController.takeGroupsPrepended` 는 없어졌습니다(`Chat` 내부에서만 쓰던 메서드입니다).
+- `ChatController.takeAppearAnimation`, `ChatController.takeGroupsPrepended` 는 이제 공개 API가 아닙니다. `Chat` 내부용이었습니다.

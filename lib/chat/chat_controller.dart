@@ -116,15 +116,6 @@ class ChatController extends ScrollController {
     _appearPendingIds[messageId] = now;
   }
 
-  /// Whether the message with [messageId] was just added and should play its entrance
-  /// animation. Returns `true` at most once per added message.
-  ///
-  /// Called by [Chat] when it first builds the message.
-  bool takeAppearAnimation(String messageId) {
-    final addedAt = _appearPendingIds.remove(messageId);
-    return addedAt != null && DateTime.now().difference(addedAt) <= _appearWindow;
-  }
-
   bool _isCollapsed = false;
 
   /// A flag you can use to track whether the chat is collapsed.
@@ -730,5 +721,20 @@ class ChatController extends ScrollController {
     if (hasChanges) {
       _notifyMessagesChanged();
     }
+  }
+}
+
+/// Toolkit-internal access to [ChatController], used by [Chat].
+///
+/// Not exported from `package:chat_toolkit/chat_toolkit.dart`, so apps cannot call it.
+extension ChatControllerInternal on ChatController {
+  /// Whether the message with [messageId] was just added and should play its entrance
+  /// animation. Returns `true` at most once per added message.
+  ///
+  /// Called by [Chat] when it first builds the message.
+  bool takeAppearAnimation(String messageId) {
+    final addedAt = _appearPendingIds.remove(messageId);
+    return addedAt != null &&
+        DateTime.now().difference(addedAt) <= ChatController._appearWindow;
   }
 }
