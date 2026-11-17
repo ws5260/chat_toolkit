@@ -86,11 +86,6 @@ class _ChatState extends State<Chat> {
   bool _isScrollable = false;
   bool _olderEndCheckScheduled = false;
 
-  // Non-reversed list only: whether the list has left offset 0 since messages were loaded.
-  // Right after setMessages it is still at 0 (the oldest end) until the app scrolls it to the bottom,
-  // and that first frame must not count as "the user reached the top" (see _onScroll).
-  bool _leftOlderEndSinceLoad = false;
-
   @override
   void initState() {
     super.initState();
@@ -139,23 +134,13 @@ class _ChatState extends State<Chat> {
       _olderEndCheckScheduled = false;
       if (!mounted || !chatController.hasClients) return;
       final position = chatController.position;
-      if (chatController.messageGroups.isEmpty) {
-        _leftOlderEndSinceLoad = false; // cleared, e.g. before reloading a room
-      } else if (position.pixels > 20) {
-        _leftOlderEndSinceLoad = true;
-      }
       // If messages don't fill the screen, maxScrollExtent is 0 and the list can't scroll,
       // so scrolling can never trigger loading older messages.
       // In that case treat the list as being at the oldest end and call onScrollToTop. Once the loaded
       // messages are added this runs again, repeating until the screen is filled.
-      // The oldest end differs by mode: maxScrollExtent for a reversed list, 0 for a normal one.
-      // A normal list also starts at 0, so 0 only counts once the list has been elsewhere;
-      // otherwise opening a room would load an older page above it and push the view off the bottom.
+      // The list is reversed, so the oldest end is maxScrollExtent.
       final atOlderEnd =
-          position.maxScrollExtent <= 0 ||
-          (chatController.reverse
-              ? position.pixels >= position.maxScrollExtent - 20
-              : _leftOlderEndSinceLoad && position.pixels <= 20);
+          position.maxScrollExtent <= 0 || position.pixels >= position.maxScrollExtent - 20;
       if (atOlderEnd) {
         widget.onScrollToTop?.call().then((value) async {
           _debounceTimer?.cancel();
@@ -213,7 +198,9 @@ class _ChatState extends State<Chat> {
       type: SizeDetectedWidgetType.height,
       onChange: _onSizeChanged,
       child: CustomScrollView(
-        reverse: chatController.reverse,
+        // Newest message at offset 0: the chat opens at the bottom, and older messages added at
+        // the far end do not move what is on screen.
+        reverse: true,
         scrollBehavior: const ScrollBehavior().copyWith(
           scrollbars: false,
           dragDevices: {
@@ -226,8 +213,8 @@ class _ChatState extends State<Chat> {
         slivers: [
           const SliverGap(30),
           _StartAtTop(
-            enabled: chatController.reverse && widget.configuration.messagesStartAtTop,
-            // The gap after the messages (above them in a reversed list) stays visible.
+            enabled: widget.configuration.messagesStartAtTop,
+            // The gap after the messages (above them in the reversed list) stays visible.
             trailingExtent: 30,
             sliver: ListenableBuilder(
               listenable: chatController.messagesRevision,
@@ -246,8 +233,8 @@ class _ChatState extends State<Chat> {
   // there, for those indices only.
   Widget _buildMessageSliverList(BuildContext context, Widget? child) {
     final groups = List<MessageGroup>.of(chatController.messageGroups);
-    final reverse = chatController.reverse;
-    int groupIndexAt(int index) => reverse ? groups.length - 1 - index : index;
+    // The list is reversed: index 0 is the newest group.
+    int groupIndexAt(int index) => groups.length - 1 - index;
 
     bool showDateDividerAt(int groupIndex) =>
         groupIndex == 0 ||
@@ -256,7 +243,7 @@ class _ChatState extends State<Chat> {
           groups[groupIndex].messages.first,
         );
 
-    // In a reversed list, adding a new message shifts every group's index by one.
+    // Adding a new message shifts every group's index by one.
     // If findChildIndexCallback finds the new index via ObjectKey(group), the existing Element
     // is moved to that slot; otherwise every visible group is rebuilt from scratch.
     // It is called only for the children currently built (the visible ones, usually near the newest
@@ -264,29 +251,26 @@ class _ChatState extends State<Chat> {
     int? indexOfGroup(MessageGroup group) {
       final groupIndex = groups.lastIndexWhere((g) => identical(g, group));
       if (groupIndex < 0) return null;
-      return reverse ? groups.length - 1 - groupIndex : groupIndex;
+      return groups.length - 1 - groupIndex;
     }
 
-    return _KeepPositionOnPrepend(
-      controller: chatController,
-      sliver: SliverPadding(
-        padding: widget.configuration.padding,
-        sliver: SuperSliverList(
-          delegate: SliverChildBuilderDelegate(
-            (context, index) {
-              final groupIndex = groupIndexAt(index);
-              return _buildGroupItem(
-                context,
-                groups[groupIndex],
-                showDateDivider: showDateDividerAt(groupIndex),
-              );
-            },
-            childCount: groups.length,
-            findChildIndexCallback: (key) {
-              final value = key is ObjectKey ? key.value : null;
-              return value is MessageGroup ? indexOfGroup(value) : null;
-            },
-          ),
+    return SliverPadding(
+      padding: widget.configuration.padding,
+      sliver: SuperSliverList(
+        delegate: SliverChildBuilderDelegate(
+          (context, index) {
+            final groupIndex = groupIndexAt(index);
+            return _buildGroupItem(
+              context,
+              groups[groupIndex],
+              showDateDivider: showDateDividerAt(groupIndex),
+            );
+          },
+          childCount: groups.length,
+          findChildIndexCallback: (key) {
+            final value = key is ObjectKey ? key.value : null;
+            return value is MessageGroup ? indexOfGroup(value) : null;
+          },
         ),
       ),
     );
@@ -312,23 +296,8 @@ class _ChatState extends State<Chat> {
       key: ObjectKey(group),
       animate: takeAppear(group.messages.first),
       duration: appearDuration,
-      shouldFollowBottom: _shouldFollowBottomDuringAppear,
-      followBottom: _followBottomDuringAppear,
       child: _buildGroupContent(context, group, isPrevProfile, showDateDivider, takeAppear),
     );
-  }
-
-  // In reverse mode the bottom is offset 0, so a growing item pushes older content up by itself.
-  // Otherwise the bottom moves while it grows; follow it if the user was at the bottom.
-  bool _shouldFollowBottomDuringAppear() => !chatController.reverse && chatController.isAtBottom();
-
-  // Called on every animation tick. Jumping now uses the previous frame's extent, so also jump
-  // after this frame's layout, which includes the height grown in this tick.
-  void _followBottomDuringAppear() {
-    chatController.scrollToBottom();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) chatController.scrollToBottom();
-    });
   }
 
   Widget _buildGroupContent(
@@ -366,8 +335,6 @@ class _ChatState extends State<Chat> {
                       // The first message animates with its group.
                       animate: i > 0 && takeAppear(group.messages[i]),
                       duration: appearDuration,
-                      shouldFollowBottom: _shouldFollowBottomDuringAppear,
-                      followBottom: _followBottomDuringAppear,
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
@@ -435,22 +402,18 @@ class _ChatState extends State<Chat> {
 /// the list moves smoothly instead of jumping), slides up and fades in.
 ///
 /// Whether to animate is decided once, when the item is first built; later rebuilds keep it.
+/// The bottom of the reversed list is offset 0, so a growing item pushes older content up and the
+/// list stays at the bottom by itself.
 class _MessageAppear extends StatefulWidget {
   const _MessageAppear({
     super.key,
     required this.animate,
     required this.duration,
-    required this.shouldFollowBottom,
-    required this.followBottom,
     required this.child,
   });
 
   final bool animate;
   final Duration? duration;
-
-  /// Checked when the animation starts: whether to keep the list at the bottom while it grows.
-  final bool Function() shouldFollowBottom;
-  final VoidCallback followBottom;
   final Widget child;
 
   @override
@@ -470,9 +433,6 @@ class _MessageAppearState extends State<_MessageAppear> with SingleTickerProvide
     final controller = AnimationController(vsync: this, duration: duration);
     _controller = controller;
     _curve = CurvedAnimation(parent: controller, curve: Curves.easeOutCubic);
-    if (widget.shouldFollowBottom()) {
-      controller.addListener(widget.followBottom);
-    }
     controller.forward();
   }
 
@@ -509,155 +469,10 @@ class _MessageAppearState extends State<_MessageAppear> with SingleTickerProvide
   }
 }
 
-/// Keeps the visible messages in place when [ChatController.appendMessages] adds older messages
-/// to a normal (not reversed) list.
-///
-/// There the older end is offset 0, so the added messages push the content down while the offset
-/// stays the same: the view jumps to the new messages, and since it is still at the older end the
-/// next page loads right away, and so on. After such a layout this reports a scroll offset
-/// correction of the added height, so the viewport lays out again at the shifted offset before
-/// anything is painted (no one-frame flash, unlike a jumpTo afterwards).
-class _KeepPositionOnPrepend extends SingleChildRenderObjectWidget {
-  const _KeepPositionOnPrepend({required this.controller, required Widget sliver})
-    : super(child: sliver);
-
-  final ChatController controller;
-
-  @override
-  _RenderKeepPositionOnPrepend createRenderObject(BuildContext context) =>
-      _RenderKeepPositionOnPrepend(controller);
-
-  @override
-  void updateRenderObject(BuildContext context, _RenderKeepPositionOnPrepend renderObject) {
-    renderObject.controller = controller;
-  }
-}
-
-class _RenderKeepPositionOnPrepend extends RenderProxySliver {
-  _RenderKeepPositionOnPrepend(this.controller);
-
-  ChatController controller;
-
-  // From the last settled layout: a group near the top of the viewport (see _recordAnchor) and the
-  // distance of its top from the top of the viewport.
-  int? _anchorIndex;
-  double _anchorOffset = 0;
-  double? _lastScrollExtent;
-
-  // While keeping the position after a prepend: groups added in front, and correction passes so far.
-  int? _pendingGroupsAdded;
-  double? _extentBeforePrepend;
-  int _passes = 0;
-
-  static const int _maxPasses = 8;
-
-  @override
-  void performLayout() {
-    super.performLayout(); // lays out the list and copies its geometry
-    final geometry = this.geometry!;
-    // The list asked for its own correction; it lays out again and this runs again.
-    if (geometry.scrollOffsetCorrection != null || controller.reverse) return;
-    final list = _findList();
-    if (list == null) return;
-
-    final added = controller.takeGroupsPrepended();
-    if (added != null) {
-      _pendingGroupsAdded = (_pendingGroupsAdded ?? 0) + added;
-      _extentBeforePrepend ??= _lastScrollExtent;
-      _passes = 0;
-    }
-
-    final pending = _pendingGroupsAdded;
-    final anchorIndex = _anchorIndex;
-    if (pending != null && anchorIndex != null) {
-      double? correction;
-      final target = anchorIndex + pending;
-      final scrollOffset = _viewportTop(list);
-      final anchor = _childWithIndex(list, target);
-      final first = list.firstChild;
-      final last = list.lastChild;
-      if (anchor != null) {
-        // Put the anchor group back at the distance from the top it had before.
-        correction = list.childScrollOffset(anchor)! - _anchorOffset - scrollOffset;
-      } else if (_passes == 0 && _extentBeforePrepend != null) {
-        // The anchor is not laid out at this offset yet: move by the added height first, then
-        // refine on the next passes once it is laid out.
-        correction = geometry.scrollExtent - _extentBeforePrepend!;
-      } else if (first != null && list.indexOf(first) > target) {
-        // Overshot (heights above the viewport are estimates): step up to just above the first
-        // laid-out group so the one before it gets laid out.
-        correction = list.childScrollOffset(first)! - 1 - scrollOffset;
-      } else if (last != null && list.indexOf(last) < target) {
-        // Undershot: step down to the last laid-out group.
-        correction = list.childScrollOffset(last)! + 1 - scrollOffset;
-      }
-      _passes++;
-      if (correction != null && correction.abs() > 0.5 && _passes <= _maxPasses) {
-        this.geometry = SliverGeometry(scrollOffsetCorrection: correction);
-        return;
-      }
-      _pendingGroupsAdded = null;
-      _extentBeforePrepend = null;
-    }
-
-    _lastScrollExtent = geometry.scrollExtent;
-    _recordAnchor(list);
-  }
-
-  // Position of the top of the viewport in the list's own coordinates. Negative while space before
-  // the list (e.g. the leading gap) is still visible: the list's scrollOffset is then 0 and the list
-  // starts below the top of the viewport.
-  double _viewportTop(RenderSliverMultiBoxAdaptor list) {
-    final c = list.constraints;
-    return c.scrollOffset - (c.viewportMainAxisExtent - c.remainingPaintExtent);
-  }
-
-  // The list itself, below wrappers such as SliverPadding.
-  RenderSliverMultiBoxAdaptor? _findList() {
-    RenderObject? object = child;
-    while (object != null) {
-      if (object is RenderSliverMultiBoxAdaptor) return object;
-      object = object is RenderObjectWithChildMixin<RenderObject> ? object.child : null;
-    }
-    return null;
-  }
-
-  RenderBox? _childWithIndex(RenderSliverMultiBoxAdaptor list, int index) {
-    for (var c = list.firstChild; c != null; c = list.childAfter(c)) {
-      if (list.indexOf(c) == index) return c;
-    }
-    return null;
-  }
-
-  void _recordAnchor(RenderSliverMultiBoxAdaptor list) {
-    // The first group starting below the top of the viewport (or the last laid-out one). Anchoring
-    // a group that starts below the top also absorbs height changes above it, e.g. the date
-    // separator of the formerly first group disappearing when older messages of the same day
-    // are added before it.
-    final scrollOffset = _viewportTop(list);
-    RenderBox? anchor;
-    for (var c = list.firstChild; c != null; c = list.childAfter(c)) {
-      final offset = list.childScrollOffset(c);
-      if (offset == null) continue;
-      anchor = c;
-      if (offset > scrollOffset) break;
-    }
-    if (anchor == null) {
-      _anchorIndex = null;
-      return;
-    }
-    // The first group can itself change when older messages are added (its date separator), so
-    // anchor the one after it when there is one.
-    if (list.indexOf(anchor) == 0) anchor = list.childAfter(anchor) ?? anchor;
-    _anchorIndex = list.indexOf(anchor);
-    _anchorOffset = list.childScrollOffset(anchor)! - scrollOffset;
-  }
-}
-
-/// Shows a short reversed list from the top (see [ChatConfiguration.messagesStartAtTop]).
+/// Shows a short list from the top (see [ChatConfiguration.messagesStartAtTop]).
 ///
 /// While the list does not fill the viewport, its unused space becomes padding on the side of
-/// scroll offset 0 (below the messages in a reversed list), so the messages move to the top.
+/// scroll offset 0 (below the messages, since the list is reversed), so the messages move to the top.
 /// Once the list fills the viewport the padding is 0 and nothing changes.
 class _StartAtTop extends SingleChildRenderObjectWidget {
   const _StartAtTop({required this.enabled, required this.trailingExtent, required Widget sliver})

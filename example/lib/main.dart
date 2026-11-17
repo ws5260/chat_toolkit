@@ -2,7 +2,10 @@ import 'package:chat_toolkit/chat_toolkit.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import 'l10n/app_localizations.dart';
+import 'rooms/fake_chat_server.dart';
 import 'rooms/room_list_screen.dart';
+import 'site/site_locale.dart';
 import 'site/site_shell.dart';
 import 'site/site_theme.dart';
 
@@ -22,13 +25,23 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'chat_toolkit',
-      debugShowCheckedModeBanner: false,
-      theme: buildSiteTheme(),
-      home: switch (home) {
-        AppHome.site => SiteShell(demoScreenBuilder: (_) => const ChatScreen()),
-        AppHome.rooms => RoomListScreen(demoScreenBuilder: (_) => const ChatScreen()),
+    return ValueListenableBuilder<Locale>(
+      valueListenable: siteLocale,
+      builder: (context, locale, _) {
+        // The fake server writes its messages in the site language.
+        FakeChatServer.instance.language = locale.languageCode;
+        return MaterialApp(
+          title: 'chat_toolkit',
+          debugShowCheckedModeBanner: false,
+          theme: buildSiteTheme(),
+          locale: locale,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: switch (home) {
+            AppHome.site => const SiteShell(),
+            AppHome.rooms => RoomListScreen(demoScreenBuilder: (_) => const ChatScreen()),
+          },
+        );
       },
     );
   }
@@ -72,9 +85,6 @@ class ChatScreen extends StatefulWidget {
 class _ChatScreenState extends State<ChatScreen> {
   late ChatController chatController;
 
-  // The apps using this toolkit run it reversed (newest message at offset 0).
-  // Toggle from the app bar to check both layouts.
-  bool _reverse = true;
   final TextEditingController textController = TextEditingController();
   // Kept on the input after sending (see _sendMessage and _buildInputField).
   final FocusNode inputFocusNode = FocusNode();
@@ -82,7 +92,7 @@ class _ChatScreenState extends State<ChatScreen> {
   @override
   void initState() {
     super.initState();
-    chatController = ChatController(reverse: _reverse);
+    chatController = ChatController();
 
     // Seed initial messages
     _loadInitialMessages();
@@ -141,23 +151,6 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   int _simulatedCount = 0;
-
-  // ChatController.reverse is fixed at construction, so switching layouts
-  // means a new controller carrying over the current messages.
-  void _toggleReverse() {
-    final old = chatController;
-    final messages = [
-      for (final group in old.messageGroups) ...group.messages,
-    ];
-    setState(() {
-      _reverse = !_reverse;
-      chatController = ChatController(reverse: _reverse)..setMessages(messages);
-    });
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      old.dispose(); // after the old Chat is gone
-      chatController.scrollToBottom();
-    });
-  }
 
   // Simulates a message pushed by the server (e.g. over a socket).
   void _simulateIncomingMessage() {
@@ -341,11 +334,6 @@ class _ChatScreenState extends State<ChatScreen> {
         backgroundColor: Theme.of(context).colorScheme.inversePrimary,
         title: const Text('Chat Toolkit Demo'),
         actions: [
-          TextButton.icon(
-            onPressed: _toggleReverse,
-            icon: const Icon(Icons.swap_vert),
-            label: Text('reverse: $_reverse'),
-          ),
           IconButton(
             tooltip: '메시지 수신 테스트',
             icon: const Icon(Icons.mark_chat_unread_outlined),
@@ -361,7 +349,7 @@ class _ChatScreenState extends State<ChatScreen> {
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             child: const Text(
               '말풍선을 길게 누르면(터치·마우스 모두 꾹 누르기) 메뉴가 열립니다. '
-              '오른쪽 위 버튼으로 메시지 수신과 reverse 모드 전환을 테스트할 수 있습니다. '
+              '오른쪽 위 버튼으로 메시지 수신을 테스트할 수 있습니다. '
               '보낸 메시지와 받은 메시지의 메뉴가 서로 다릅니다.',
               style: TextStyle(fontSize: 12),
             ),
@@ -372,7 +360,7 @@ class _ChatScreenState extends State<ChatScreen> {
               key: ValueKey(chatController),
               chatController: chatController,
               configuration: ChatConfiguration(
-                // In the reversed layout, a few messages start at the top instead of the bottom.
+                // A few messages start at the top instead of the bottom.
                 messagesStartAtTop: true,
                 // New messages grow in from the bottom instead of popping in.
                 messageAppearAnimationDuration:

@@ -1,6 +1,8 @@
 import 'package:chat_toolkit/chat_toolkit.dart';
 import 'package:flutter/material.dart';
 
+import '../l10n/app_localizations.dart';
+import '../site/site_locale.dart';
 import '../site/site_theme.dart';
 import 'fake_chat_server.dart';
 
@@ -8,10 +10,9 @@ import 'fake_chat_server.dart';
 /// toolkit do: setMessages when the first page arrives, scrollToBottom on the next frame, and
 /// appendMessages for older pages when the list reaches its oldest end.
 class RoomChatScreen extends StatefulWidget {
-  const RoomChatScreen({super.key, required this.room, required this.reverse});
+  const RoomChatScreen({super.key, required this.room});
 
   final RoomInfo room;
-  final bool reverse;
 
   @override
   State<RoomChatScreen> createState() => _RoomChatScreenState();
@@ -23,7 +24,6 @@ class _RoomChatScreenState extends State<RoomChatScreen> {
   // Kept on the input after sending (see _sendMessage and _buildInputField).
   final _inputFocusNode = FocusNode();
   late final ChatController _chatController = ChatController(
-    reverse: widget.reverse,
     customSortCallback: (a, b) => a.id.compareTo(b.id),
   );
 
@@ -123,7 +123,7 @@ class _RoomChatScreenState extends State<RoomChatScreen> {
     _textController.clear();
     _chatController.dispatchMessage(
       SenderMessage(
-        name: '나',
+        name: _server.myName,
         timestamp: DateTime.now().toIso8601String(),
         elements: [DemoTextElement(text)],
       ),
@@ -139,12 +139,12 @@ class _RoomChatScreenState extends State<RoomChatScreen> {
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
-        title: Text(widget.room.title,
+        title: Text(roomTitle(AppLocalizations.of(context), widget.room.id),
             style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700)),
         shape: const Border(bottom: BorderSide(color: SiteColors.grey100)),
         actions: [
           IconButton(
-            tooltip: '메시지 수신 테스트',
+            tooltip: AppLocalizations.of(context).receiveMessage,
             icon: const Icon(Icons.mark_chat_unread_outlined),
             onPressed: _loadingInitial ? null : _receiveMessage,
           ),
@@ -165,7 +165,7 @@ class _RoomChatScreenState extends State<RoomChatScreen> {
                     chatController: _chatController,
                     onScrollToTop: _onScrollToTop,
                     configuration: ChatConfiguration(
-                      // In the reversed layout, a few messages start at the top instead of
+                      // A few messages start at the top instead of
                       // the bottom.
                       messagesStartAtTop: true,
                       messageAppearAnimationDuration: const Duration(
@@ -211,16 +211,16 @@ class _RoomChatScreenState extends State<RoomChatScreen> {
                 if (_loadingInitial)
                   const Center(child: CircularProgressIndicator()),
                 if (_loadingOlder)
-                  const Align(
+                  Align(
                     alignment: Alignment.topCenter,
                     child: Padding(
-                      padding: EdgeInsets.only(top: 8),
+                      padding: const EdgeInsets.only(top: 8),
                       child: Chip(
-                        avatar: SizedBox.square(
+                        avatar: const SizedBox.square(
                           dimension: 14,
                           child: CircularProgressIndicator(strokeWidth: 2),
                         ),
-                        label: Text('이전 메시지 불러오는 중'),
+                        label: Text(AppLocalizations.of(context).loadingOlder),
                       ),
                     ),
                   ),
@@ -254,17 +254,17 @@ class _RoomChatScreenState extends State<RoomChatScreen> {
         final max = hasPosition
             ? _chatController.position.maxScrollExtent
             : 0.0;
-        final fromBottom = widget.reverse ? pixels : max - pixels;
+        final fromBottom = pixels;
         return Container(
           width: double.infinity,
           color: SiteColors.grey50,
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
           child: Text(
-            'reverse: ${widget.reverse}  ·  바닥까지 ${fromBottom.toStringAsFixed(0)}px  '
+            'to bottom ${fromBottom.toStringAsFixed(0)}px  '
             '(pixels ${pixels.toStringAsFixed(0)} / max ${max.toStringAsFixed(0)})\n'
-            '로드 $_loadedCount/${widget.room.totalMessages}건  ·  '
-            'onScrollToTop $_onScrollToTopCalls회'
-            '${_hasNoMoreMessage ? '  ·  끝까지 불러옴' : ''}',
+            'loaded $_loadedCount/${widget.room.totalMessages}  ·  '
+            'onScrollToTop × $_onScrollToTopCalls'
+            '${_hasNoMoreMessage ? '  ·  all loaded' : ''}',
             style: const TextStyle(
                 fontSize: 11, fontFamily: 'monospace', color: SiteColors.grey600),
           ),
@@ -284,7 +284,7 @@ class _RoomChatScreenState extends State<RoomChatScreen> {
               focusNode: _inputFocusNode,
               textInputAction: TextInputAction.send,
               decoration: InputDecoration(
-                hintText: '메시지를 입력해 주세요',
+                hintText: AppLocalizations.of(context).inputHint,
                 hintStyle: const TextStyle(color: SiteColors.grey400),
                 isDense: true,
                 filled: true,

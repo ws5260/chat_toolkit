@@ -16,8 +16,6 @@ class RoomListScreen extends StatefulWidget {
 }
 
 class _RoomListScreenState extends State<RoomListScreen> {
-  // The apps using this toolkit run it reversed.
-  bool _reverse = true;
 
   @override
   Widget build(BuildContext context) {
@@ -28,13 +26,6 @@ class _RoomListScreenState extends State<RoomListScreen> {
       ),
       body: ListView(
         children: [
-          SwitchListTile(
-            title: const Text('reverse'),
-            subtitle: const Text('켜면 최신 메시지가 offset 0 (툴킷을 쓰는 앱의 설정). 메시지가 적으면 messagesStartAtTop 으로 위에서부터 표시'),
-            value: _reverse,
-            onChanged: (value) => setState(() => _reverse = value),
-          ),
-          const Divider(height: 1),
           const Padding(
             padding: EdgeInsets.fromLTRB(16, 16, 16, 4),
             child: Text('서버에서 불러오는 채팅방', style: TextStyle(fontWeight: FontWeight.bold)),
@@ -47,7 +38,7 @@ class _RoomListScreenState extends State<RoomListScreen> {
                   '${room.description}\n응답 ${room.latency.inMilliseconds}ms'),
               isThreeLine: true,
               onTap: () => Navigator.of(context).push(MaterialPageRoute(
-                builder: (_) => RoomChatScreen(room: room, reverse: _reverse),
+                builder: (_) => RoomChatScreen(room: room),
               )),
             ),
           const Divider(height: 1),

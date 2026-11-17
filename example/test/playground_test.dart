@@ -1,6 +1,9 @@
 import 'package:example/main.dart';
+import 'package:example/site/site_locale.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+const fewKey = ValueKey('segment-PlaygroundHistory.few');
 
 void main() {
   for (final size in [const Size(1400, 900), const Size(400, 800)]) {
@@ -21,24 +24,24 @@ void main() {
       await tester.pump(const Duration(seconds: 3));
       await tester.pumpAndSettle();
       expect(find.text('hello'), findsOneWidget);
-      expect(find.text('"hello" 잘 받았어요.'), findsOneWidget);
+      expect(find.text('Got it: "hello"'), findsOneWidget);
 
       // Narrow screens switch between the preview and the settings.
       if (narrow) {
-        await tester.tap(find.text('설정'));
+        await tester.tap(find.text('Settings'));
         await tester.pumpAndSettle();
       }
-      await tester.scrollUntilVisible(find.text('3건'), 200,
+      await tester.scrollUntilVisible(find.byKey(fewKey), 200,
           scrollable: find.descendant(
               of: find.byKey(const Key('playground-settings')),
               matching: find.byType(Scrollable)));
-      await tester.ensureVisible(find.text('3건'));
+      await tester.ensureVisible(find.byKey(fewKey));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('3건'));
+      await tester.tap(find.byKey(fewKey));
       await tester.pump(const Duration(seconds: 1));
       await tester.pumpAndSettle();
       if (narrow) {
-        await tester.tap(find.text('미리보기'));
+        await tester.tap(find.text('Preview'));
         await tester.pumpAndSettle();
       }
       expect(find.textContaining('#2 '), findsOneWidget);
@@ -55,21 +58,41 @@ void main() {
       await tester.pumpAndSettle();
 
       Future<void> open(String label) async {
-        if (size.width < 820) {
-          await tester.tap(find.byTooltip('메뉴'));
+        if (size.width < 960) {
+          await tester.tap(find.byTooltip('Menu'));
           await tester.pumpAndSettle();
         }
         await tester.tap(find.text(label).hitTestable().last);
         await tester.pumpAndSettle();
       }
 
-      await open('시작하기');
-      expect(find.text('패키지를 설치해요'), findsOneWidget);
+      await open('Getting started');
+      expect(find.text('Install the package'), findsOneWidget);
 
-      await open('예제');
+      await open('Examples');
       await tester.pump(const Duration(seconds: 1));
       await tester.pumpAndSettle();
-      expect(find.text('보통 방').hitTestable(), findsWidgets);
+      expect(find.text('Normal room').hitTestable(), findsWidgets);
     });
   }
+
+  testWidgets('switching the language translates the site', (tester) async {
+    tester.view.physicalSize = const Size(1400, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    addTearDown(() => siteLocale.value = const Locale('en'));
+
+    await tester.pumpWidget(const MyApp());
+    await tester.pump(const Duration(seconds: 1));
+    await tester.pumpAndSettle();
+    expect(find.text('Alex'), findsWidgets);
+
+    await tester.tap(find.byTooltip('Language'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('한국어').last);
+    await tester.pump(const Duration(seconds: 1));
+    await tester.pumpAndSettle();
+    expect(find.text('레이아웃'), findsOneWidget);
+    expect(find.text('민지'), findsWidgets);
+  });
 }

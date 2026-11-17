@@ -1,0 +1,61 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="back" x1="0" y1="0" x2="0.9" y2="1">
+      <stop offset="0" stop-color="#FFB98A"/>
+      <stop offset="0.5" stop-color="#FF8FA0"/>
+      <stop offset="1" stop-color="#C08BFF"/>
+    </linearGradient>
+    <linearGradient id="backSide" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#F2797F"/>
+      <stop offset="1" stop-color="#A97BEF"/>
+    </linearGradient>
+    <linearGradient id="front" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#8DB4FF"/>
+      <stop offset="0.45" stop-color="#6F86F7"/>
+      <stop offset="1" stop-color="#B57CF6"/>
+    </linearGradient>
+    <linearGradient id="frontSide" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#6A78EE"/>
+      <stop offset="1" stop-color="#8E55E6"/>
+    </linearGradient>
+    <radialGradient id="shine" cx="0.25" cy="0.15" r="0.75">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.55"/>
+      <stop offset="1" stop-color="#FFFFFF" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="node" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#9CC4FF"/>
+      <stop offset="1" stop-color="#6E7FF3"/>
+    </linearGradient>
+    <linearGradient id="plus" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#FF8E8E"/>
+      <stop offset="1" stop-color="#F7A27C"/>
+    </linearGradient>
+    <path id="backShape" d="M100 120 H222 A64 64 0 0 1 286 184 V252 A64 64 0 0 1 222 316 H138 L82 372 Q72 380 70 368 V308 A64 64 0 0 1 36 252 V184 A64 64 0 0 1 100 120 Z"/>
+    <path id="frontShape" d="M226 186 H374 A76 76 0 0 1 450 262 V346 A76 76 0 0 1 418 408 V462 Q416 476 404 468 L346 422 H226 A76 76 0 0 1 150 346 V262 A76 76 0 0 1 226 186 Z"/>
+  </defs>
+  <g transform="translate(14,-6)">
+    <!-- back bubble -->
+    <use href="#backShape" fill="url(#backSide)" transform="translate(-8,8)"/>
+    <use href="#backShape" fill="url(#back)"/>
+    <use href="#backShape" fill="url(#shine)"/>
+    <!-- front bubble -->
+    <g opacity="0.96">
+      <use href="#frontShape" fill="url(#frontSide)" transform="translate(9,9)"/>
+      <use href="#frontShape" fill="url(#front)"/>
+      <rect x="196" y="232" width="200" height="140" rx="50" fill="#4F6BEA" opacity="0.35"/>
+      <use href="#frontShape" fill="url(#shine)" opacity="0.6"/>
+    </g>
+    <!-- node connector -->
+    <line x1="326" y1="208" x2="392" y2="132" stroke="url(#node)" stroke-width="16" stroke-linecap="round"/>
+    <circle cx="326" cy="210" r="28" fill="#6476EC"/>
+    <circle cx="324" cy="206" r="27" fill="url(#node)"/>
+    <circle cx="394" cy="130" r="36" fill="#6476EC"/>
+    <circle cx="391" cy="126" r="35" fill="url(#node)"/>
+    <circle cx="380" cy="114" r="12" fill="#FFFFFF" opacity="0.35"/>
+    <!-- plus -->
+    <g fill="url(#plus)">
+      <rect x="318" y="40" width="14" height="50" rx="7"/>
+      <rect x="300" y="58" width="50" height="14" rx="7"/>
+    </g>
+  </g>
+</svg>

@@ -132,12 +132,6 @@ class ChatController extends ScrollController {
   /// Not used by the toolkit itself. Change it with [setIsCollapsed].
   bool get isCollapsed => _isCollapsed;
 
-  late final bool _reverse;
-
-  /// Whether the list is laid out in reverse, with the newest messages at
-  /// scroll offset `0`.
-  bool get reverse => _reverse;
-
   bool _isDisposed = false;
 
   /// Whether [dispose] has been called.
@@ -283,7 +277,6 @@ class ChatController extends ScrollController {
   /// Pass them newest first: each message is inserted before the current
   /// oldest one.
   void appendMessages(List<Message> messages) {
-    final groupCountBefore = _messageGroups.length;
     for (final message in messages) {
       if (message.isRead != null && message.isRead == false) {
         _unreadMessageIds.add(message.id);
@@ -313,41 +306,34 @@ class ChatController extends ScrollController {
         );
       }
     }
-    // In a normal list the older end is offset 0, so content added there pushes what the user is
-    // looking at downward. Chat shifts the offset by the added height in its next layout.
-    // (In a reversed list older messages are added at the far end and nothing moves.)
-    if (!_reverse && groupCountBefore > 0 && messages.isNotEmpty) {
-      _groupsPrepended = (_groupsPrepended ?? 0) + _messageGroups.length - groupCountBefore;
-    }
     _notifyMessagesChanged();
-  }
-
-  int? _groupsPrepended;
-
-  /// When older messages were just added by [appendMessages] to a normal (not reversed) list,
-  /// the number of groups added in front, so the visible groups can be kept in place;
-  /// otherwise `null`. Returns the value once.
-  ///
-  /// Called by [Chat] during layout.
-  int? takeGroupsPrepended() {
-    final value = _groupsPrepended;
-    _groupsPrepended = null;
-    return value;
   }
 
   /// Creates a [ChatController].
   ///
-  /// * [reverse] lays out the list in reverse so it starts at the newest
-  ///   message. Defaults to `false`.
+  /// The list is always laid out in reverse: the newest message is at scroll
+  /// offset `0`, so the chat opens at the newest message and older messages
+  /// added by [appendMessages] do not move what is on screen.
+  ///
   /// * `customSortCallback` orders messages with the same timestamp.
   /// * `additionalGroupCondition` adds a condition for grouping messages.
+  /// * `reverse` is ignored and only kept so existing code still compiles.
   ChatController({
-    bool reverse = false,
+    @Deprecated(
+      'Ignored: the chat is always laid out from the newest message. '
+      'Remove this argument. Will be removed in a future major version.',
+    )
+    bool? reverse,
     this._customSortCallback,
     this._additionalGroupCondition,
-  }) {
-    _reverse = reverse;
-  }
+  });
+
+  /// Always `true`: the list is laid out from the newest message (scroll offset `0`).
+  @Deprecated(
+    'Always true: the chat is always laid out from the newest message. '
+    'Will be removed in a future major version.',
+  )
+  bool get reverse => true;
 
   /// Whether [message] can join [group] by default: same side
   /// ([Message.isSender]), same [Message.name] and same minute.
@@ -374,49 +360,27 @@ class ChatController extends ScrollController {
 
   static const double _bottomEpsilon = 2.0;
 
-  /// Jumps to the newest message.
+  /// Jumps to the newest message (scroll offset `0`).
   void scrollToBottom() {
     if (_isDisposed || !hasClients) return;
-    final target = reverse ? 0.0 : position.maxScrollExtent;
-    if ((position.pixels - target).abs() <= _bottomEpsilon) return;
-    jumpTo(target);
-  }
-
-  // Scrolls to a message that was just added. In a reversed list the bottom is offset 0, so one jump
-  // is enough. Otherwise the bottom is maxScrollExtent, which includes the new message only after
-  // the next layout: jump now (to the current bottom, so an entrance animation starting this frame
-  // sees the list at the bottom and follows it) and again after that layout.
-  void _scrollToBottomForNewMessage() {
-    scrollToBottom();
-    if (!_reverse) {
-      WidgetsBinding.instance.addPostFrameCallback((_) => scrollToBottom());
-    }
+    if (position.pixels.abs() <= _bottomEpsilon) return;
+    jumpTo(0);
   }
 
   /// Scrolls toward older messages by [offset].
   void scrollToTopByValue(double offset) {
     if (!hasClients) return;
     final currentOffset = position.pixels;
-    if (reverse) {
-      if (currentOffset >= position.maxScrollExtent) return;
-      jumpTo(currentOffset + offset);
-    } else {
-      if (currentOffset <= 0) return;
-      jumpTo(currentOffset - offset);
-    }
+    if (currentOffset >= position.maxScrollExtent) return;
+    jumpTo(currentOffset + offset);
   }
 
   /// Scrolls toward newer messages by [offset]. Offset direction is the opposite of [scrollToTopByValue].
   void scrollToBottomByValue(double offset) {
     if (!hasClients) return;
     final currentOffset = position.pixels;
-    if (reverse) {
-      if (currentOffset <= 0) return;
-      jumpTo(currentOffset - offset);
-    } else {
-      if (currentOffset >= position.maxScrollExtent) return;
-      jumpTo(currentOffset + offset);
-    }
+    if (currentOffset <= 0) return;
+    jumpTo(currentOffset - offset);
   }
 
   /// Adds [message] to its group. A message whose id already exists is not added again.
@@ -523,7 +487,7 @@ class ChatController extends ScrollController {
     );
     // Show the sent bubble right away, not only after onDispatch completes (a server round trip).
     if (message.isSender) {
-      _scrollToBottomForNewMessage();
+      scrollToBottom();
     }
     late final MessageDispatchResult dispatchResult;
     late final Message? result;
@@ -591,7 +555,7 @@ class ChatController extends ScrollController {
     }
     if (message.isSender) {
       // The bubble changed from the loading indicator to its content (or to failed).
-      _scrollToBottomForNewMessage();
+      scrollToBottom();
     }
     if (_dispatchResultController.isClosed) return dispatchResult;
     _dispatchResultController.add(dispatchResult);
@@ -719,11 +683,7 @@ class ChatController extends ScrollController {
   /// newest message. Returns `true` when not attached to a scroll view.
   bool isAtBottom({double threshold = 20}) {
     if (!hasClients) return true;
-    if (reverse) {
-      return position.pixels <= threshold;
-    } else {
-      return (position.maxScrollExtent - position.pixels) <= threshold;
-    }
+    return position.pixels <= threshold;
   }
 
   /// The group containing this message, or null if none.

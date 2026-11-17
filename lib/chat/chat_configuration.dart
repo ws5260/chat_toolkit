@@ -240,15 +240,12 @@ class ChatConfiguration {
   /// `null` (the default) disables the animation.
   final Duration? messageAppearAnimationDuration;
 
-  /// Whether a reversed chat ([ChatController.reverse]) shows its messages from the top while they
-  /// do not fill the screen.
+  /// Whether the chat shows its messages from the top while they do not fill the screen.
   ///
-  /// A reversed list starts at the bottom, so two or three messages sit at the bottom with empty
-  /// space above them. With this set, the empty space goes below them instead, like a normal
-  /// list. Once the messages fill the screen nothing changes: the newest message stays at the
-  /// bottom and the reversed list keeps its behavior.
-  ///
-  /// Has no effect on a non-reversed chat, which already starts at the top. Defaults to `false`.
+  /// The list is laid out from the bottom (newest message at scroll offset `0`), so two or three
+  /// messages sit at the bottom with empty space above them. With this set, the empty space goes
+  /// below them instead. Once the messages fill the screen nothing changes: the newest message
+  /// stays at the bottom. Defaults to `false`.
   final bool messagesStartAtTop;
 
   /// Creates a [ChatConfiguration].

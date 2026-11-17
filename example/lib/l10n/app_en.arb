@@ -1,0 +1,122 @@
+{
+  "@@locale": "en",
+  "navPlayground": "Playground",
+  "navExamples": "Examples",
+  "navGettingStarted": "Getting started",
+  "menu": "Menu",
+  "playgroundIntro": "Change an option and the chat updates right away. Messages are simulated, so send as many as you like.",
+  "preview": "Preview",
+  "settings": "Settings",
+  "receiveMessage": "Receive",
+  "markAllRead": "Mark all read",
+  "restart": "Start over",
+  "online": "Online",
+  "inputHint": "Type a message",
+  "incomingMessage": "New message ({count})",
+  "@incomingMessage": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "autoReply": "Got it: \"{text}\"",
+  "@autoReply": {
+    "placeholders": {
+      "text": {
+        "type": "String"
+      }
+    }
+  },
+  "newMessageFrom": "New message from {name}",
+  "@newMessageFrom": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "readOnlyNotice": "This chat is read-only",
+  "menuRetry": "Send again",
+  "menuDelete": "Delete",
+  "menuCopy": "Copy",
+  "sectionLayout": "Layout",
+  "startAtTopTitle": "Few messages start at the top",
+  "startAtTopDesc": "Instead of sitting at the bottom",
+  "senderSideTitle": "My messages on",
+  "sideRight": "Right",
+  "sideLeft": "Left",
+  "sidePadding": "Side padding",
+  "sectionBubble": "Bubbles",
+  "bubbleColor": "My bubble color",
+  "cornerRadius": "Corner radius",
+  "maxWidth": "Max width",
+  "noLimit": "No limit",
+  "appearAnimation": "Entrance animation",
+  "off": "Off",
+  "sectionDisplay": "Display",
+  "timeTitle": "Sent time",
+  "timeDesc": "Off shows the default format",
+  "profileTitle": "Other person's profile",
+  "unreadTitle": "Unread indicator",
+  "unreadDesc": "Shown on messages you send from now on",
+  "longPressMenuTitle": "Long-press menu",
+  "notificationTitle": "New message notice",
+  "notificationDesc": "Shown when a message arrives while you are scrolled up",
+  "dateSeparatorTitle": "Custom date separator",
+  "readOnlyTitle": "Read-only",
+  "readOnlyDesc": "Shows a notice instead of the input field",
+  "sectionServer": "Simulation",
+  "storedMessages": "Stored messages",
+  "none": "None",
+  "messageCount": "{count}",
+  "@messageCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "responseTime": "Response time",
+  "seconds": "{value}s",
+  "@seconds": {
+    "placeholders": {
+      "value": {
+        "type": "String"
+      }
+    }
+  },
+  "imagesTitle": "Mix in image messages",
+  "imagesDesc": "30% are images that load late",
+  "sendResult": "Send result",
+  "resultSuccess": "Success",
+  "resultFail": "Fail",
+  "resultBlock": "Block",
+  "autoReplyTitle": "Auto reply",
+  "autoReplyDesc": "After a successful send, the other person reads it and replies",
+  "examplesIntro": "Chat rooms that load their messages from a server. Each room has a different size and response time, so you can see how scrolling behaves.",
+  "roomShortTitle": "Short room",
+  "roomShortDesc": "5 messages, not enough to fill the screen",
+  "roomNormalTitle": "Normal room",
+  "roomNormalDesc": "60 messages in 2 pages of 30",
+  "roomLongTitle": "Long room",
+  "roomLongDesc": "500 messages, 30 more each time you reach the top",
+  "roomImagesTitle": "Image room",
+  "roomImagesDesc": "120 messages, 40% are images that load late and grow",
+  "roomSlowTitle": "Slow server",
+  "roomSlowDesc": "200 messages, responses take 2 seconds",
+  "loadingOlder": "Loading older messages",
+  "gsIntro": "Grouping, date separators, failed sends and retries, and loading older messages, all handled by one ChatController.",
+  "step1Title": "Install the package",
+  "step2Title": "Define how message content is drawn",
+  "step2Desc": "Describe what goes inside a bubble, such as text or images, as a MessageElement.",
+  "step3Title": "Add the chat",
+  "step3Desc": "Put messages from the server in with setMessages, and older ones loaded on scroll with appendMessages.",
+  "step4Title": "Send messages",
+  "step4Desc": "Returning null marks the message as failed; long-press it to send again.",
+  "gsCtaTitle": "Want to try the options?",
+  "gsCtaDesc": "See how each setting changes the chat in the playground.",
+  "gsCtaButton": "Open playground",
+  "copy": "Copy",
+  "copied": "Copied"
+}

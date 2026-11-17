@@ -391,3 +391,25 @@ fix: Add missing filename configuration for web platform
 
 - `ChatController.takeAppearAnimation`, `ChatController.takeGroupsPrepended` 는 `Chat` 내부에서 사용합니다.
 - 예제 앱의 첫 화면이 채팅방 목록으로 바뀌었습니다. 각 방은 가짜 서버에서 메시지를 불러오며(짧은 방, 페이지 로드, 늦게 로드되는 이미지, 느린 서버), `reverse` 스위치와 실시간 스크롤 상태 표시가 있습니다. 기존 데모는 목록 마지막 항목입니다. 메시지를 보낸 뒤에도 입력창 포커스가 유지됩니다.
+
+## 2.0.0
+
+### Changed
+
+- The chat is always laid out from the newest message (offset 0): it opens at the bottom, and loading older messages does not move what is on screen. The code paths that only served the non-reversed layout are removed.
+- `messagesStartAtTop` now applies to every chat. Turn it on if a chat with only a few messages should start at the top.
+
+### Deprecated
+
+- `ChatController(reverse:)` is ignored and `ChatController.reverse` always returns `true`. Both still compile so existing code keeps working; remove them, as they will be removed in a future major version.
+- `ChatController.takeGroupsPrepended` is removed (it was only used by `Chat`).
+
+### 변경
+
+- 채팅은 항상 최신 메시지가 offset 0 인 방향으로 배치됩니다. 맨 아래에서 열리고, 이전 메시지를 불러와도 보던 화면이 움직이지 않습니다. reverse 가 아닐 때만 쓰던 코드는 지웠습니다.
+- `messagesStartAtTop` 은 이제 모든 채팅에 적용됩니다. 메시지가 몇 개뿐일 때 위에서부터 보이게 하려면 켜 주세요.
+
+### 지원 중단 예정 (Deprecated)
+
+- `ChatController(reverse:)` 는 무시되고, `ChatController.reverse` 는 항상 `true` 를 돌려줍니다. 기존 코드가 깨지지 않도록 남겨 두었지만 다음 메이저 버전에서 없어지니 지워 주세요.
+- `ChatController.takeGroupsPrepended` 는 없어졌습니다(`Chat` 내부에서만 쓰던 메서드입니다).

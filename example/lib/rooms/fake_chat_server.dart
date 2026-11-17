@@ -31,33 +31,33 @@ class RoomInfo {
 const List<RoomInfo> demoRooms = [
   RoomInfo(
     id: 'short',
-    title: '짧은 방',
-    description: '메시지 5건. 화면을 다 채우지 못함',
+    title: 'Short room',
+    description: '5 messages, not enough to fill the screen',
     totalMessages: 5,
   ),
   RoomInfo(
     id: 'normal',
-    title: '보통 방',
-    description: '메시지 60건. 30건씩 2페이지',
+    title: 'Normal room',
+    description: '60 messages in 2 pages of 30',
     totalMessages: 60,
   ),
   RoomInfo(
     id: 'long',
-    title: '긴 방',
-    description: '메시지 500건. 위로 스크롤하면 30건씩 계속 불러옴',
+    title: 'Long room',
+    description: '500 messages, 30 more at a time when scrolled up',
     totalMessages: 500,
   ),
   RoomInfo(
     id: 'images',
-    title: '이미지 많은 방',
-    description: '메시지 120건 중 40%가 이미지. 이미지가 늦게 로드되며 말풍선이 커짐',
+    title: 'Image room',
+    description: '120 messages, 40% images that load late and grow',
     totalMessages: 120,
     imageRatio: 0.4,
   ),
   RoomInfo(
     id: 'slow',
-    title: '느린 서버 방',
-    description: '메시지 200건. 서버 응답 2초',
+    title: 'Slow server',
+    description: '200 messages, 2-second responses',
     totalMessages: 200,
     latency: Duration(seconds: 2),
     imageRatio: 0.15,
@@ -70,6 +70,15 @@ class FakeChatServer {
   static final FakeChatServer instance = FakeChatServer._();
 
   static const int pageSize = 30;
+
+  /// Language of the generated messages ('en' or 'ko').
+  String language = 'en';
+
+  /// Name of the other person in every room.
+  String get otherName => language == 'ko' ? '민지' : 'Alex';
+
+  /// Name of the user.
+  String get myName => language == 'ko' ? '나' : 'Me';
 
   // Fixed per app run so timestamps stay stable between page loads.
   final DateTime _now = DateTime.now();
@@ -86,9 +95,9 @@ class FakeChatServer {
   /// A message pushed by the server (e.g. over a socket).
   Message incomingMessage(RoomInfo room, int count) => ReceiverMessage(
         id: '${room.id}_in_${DateTime.now().microsecondsSinceEpoch}',
-        name: '상담사',
+        name: otherName,
         timestamp: DateTime.now().toIso8601String(),
-        elements: [DemoTextElement('새로 도착한 메시지 $count')],
+        elements: [DemoTextElement(language == 'ko' ? '새로 도착한 메시지 $count' : 'New message $count')],
       );
 
   /// Index of a message created by this server, from its id; `null` for other messages.
@@ -97,15 +106,28 @@ class FakeChatServer {
     return i < 0 ? null : int.tryParse(message.id.substring(i + 1));
   }
 
-  static const List<String> _texts = [
-    '네',
-    '확인했습니다.',
-    '안녕하세요, 문의 주셔서 감사합니다.',
-    '말씀하신 내용 확인 후 다시 연락드리겠습니다. 잠시만 기다려 주세요.',
-    '주문하신 상품은 오늘 출고될 예정이며, 배송 조회는 문자로 안내된 링크에서 확인하실 수 있습니다. 추가로 궁금하신 점이 있으면 언제든 말씀해 주세요.',
-    '감사합니다!',
-    '혹시 주문번호를 알려주실 수 있을까요?',
-  ];
+  static const Map<String, List<String>> _textsByLanguage = {
+    'en': [
+      'Sure',
+      'Sounds good!',
+      'Are you free this weekend?',
+      'I was thinking we could try that new noodle place near the station.',
+      'I just finished the book you lent me. The ending was not what I expected at all, so I want to hear what you thought about it next time we meet.',
+      'Haha, same here',
+      'What time works for you?',
+    ],
+    'ko': [
+      '응',
+      '좋아!',
+      '이번 주말에 시간 돼?',
+      '역 근처에 새로 생긴 국숫집 가 보면 어떨까 해.',
+      '빌려준 책 방금 다 읽었어. 결말이 생각이랑 완전히 달라서, 다음에 만나면 네 생각도 듣고 싶어.',
+      'ㅋㅋ 나도',
+      '몇 시가 괜찮아?',
+    ],
+  };
+
+  List<String> get _texts => _textsByLanguage[language] ?? _textsByLanguage['en']!;
 
   Message _message(RoomInfo room, int index) {
     final random = Random(room.id.hashCode ^ index);
@@ -127,8 +149,8 @@ class FakeChatServer {
     // Runs of 3 messages per side.
     final isSender = (index ~/ 3).isOdd;
     return isSender
-        ? SenderMessage(id: id, name: '나', timestamp: timestamp, elements: elements)
-        : ReceiverMessage(id: id, name: '상담사', timestamp: timestamp, elements: elements);
+        ? SenderMessage(id: id, name: myName, timestamp: timestamp, elements: elements)
+        : ReceiverMessage(id: id, name: otherName, timestamp: timestamp, elements: elements);
   }
 }
 

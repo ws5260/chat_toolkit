@@ -1,6 +1,28 @@
-# Chat Toolkit
+<p align="center">
+  <img src="https://raw.githubusercontent.com/ws5260/chat_toolkit/master/doc/logo.png" alt="Chat Toolkit logo" width="128" height="128">
+</p>
+
+<h1 align="center">Chat Toolkit</h1>
+
+<p align="center">
+  <strong>Drop-in chat UI for Flutter.</strong><br>
+  Grouped bubbles, async sending with retry, and smooth scrolling through long histories.
+</p>
+
+<p align="center">
+  <a href="https://pub.dev/packages/chat_toolkit"><img src="https://img.shields.io/pub/v/chat_toolkit.svg" alt="pub version"></a>
+  <a href="https://ws5260.github.io/chat_toolkit/"><img src="https://img.shields.io/badge/demo-live-3182F6.svg" alt="live demo"></a>
+</p>
+
+<p align="center">
+  <a href="https://ws5260.github.io/chat_toolkit/"><b>Live demo</b></a> ·
+  <a href="https://github.com/ws5260/chat_toolkit/tree/master/example">Example app</a> ·
+  <a href="#quick-start">Quick start</a>
+</p>
 
 A customizable chat widget toolkit for Flutter. It gives you a ready-to-use chat UI with message grouping, async sending with retry, and an optimized scrolling list.
+
+Try every option in the [live demo](https://ws5260.github.io/chat_toolkit/): change the settings and the chat updates right away, with simulated messages, no backend needed. The demo is the [example app](example/) built for the web.
 
 ## Contents
 
@@ -326,7 +348,7 @@ final controller = ChatController(
 | `bubbleConfiguration` | Bubble appearance settings |
 | `readOnlyWidget` | Widget shown in read-only mode |
 | `messageAppearAnimationDuration` | Entrance animation for newly added messages (default: off) |
-| `messagesStartAtTop` | In a reversed chat, show a few messages from the top instead of the bottom (default: false) |
+| `messagesStartAtTop` | Show a few messages from the top instead of the bottom (default: false) |
 
 ### BubbleConfiguration
 

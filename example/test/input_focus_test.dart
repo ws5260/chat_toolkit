@@ -41,7 +41,7 @@ void main() {
   testWidgets('room keeps input focus after sending', (tester) async {
     await tester.pumpWidget(const MyApp(home: AppHome.rooms));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('보통 방'));
+    await tester.tap(find.text('Normal room'));
     await tester.pump(const Duration(seconds: 1));
     await tester.pumpAndSettle();
     await expectFocusKeptAfterSending(tester);

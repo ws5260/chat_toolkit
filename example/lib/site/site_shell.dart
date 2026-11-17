@@ -1,31 +1,35 @@
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../l10n/app_localizations.dart';
 import '../playground/playground_screen.dart';
 import 'examples_page.dart';
 import 'getting_started_page.dart';
+import 'site_locale.dart';
 import 'site_theme.dart';
 
-const _version = '1.7.0';
+const _version = '2.0.0';
 final _pubUrl = Uri.parse('https://pub.dev/packages/chat_toolkit');
 final _githubUrl = Uri.parse('https://github.com/ws5260/chat_toolkit');
 
 enum SitePage {
-  playground('플레이그라운드', Icons.tune_rounded),
-  examples('예제', Icons.forum_outlined),
-  gettingStarted('시작하기', Icons.menu_book_outlined);
+  playground(Icons.tune_rounded),
+  examples(Icons.forum_outlined),
+  gettingStarted(Icons.menu_book_outlined);
 
-  const SitePage(this.label, this.icon);
-  final String label;
+  const SitePage(this.icon);
   final IconData icon;
+
+  String label(AppLocalizations l) => switch (this) {
+        SitePage.playground => l.navPlayground,
+        SitePage.examples => l.navExamples,
+        SitePage.gettingStarted => l.navGettingStarted,
+      };
 }
 
 /// The demo web site: a header with the menu, and the selected page below it.
 class SiteShell extends StatefulWidget {
-  const SiteShell({super.key, required this.demoScreenBuilder});
-
-  /// The single-room demo listed on the examples page.
-  final WidgetBuilder demoScreenBuilder;
+  const SiteShell({super.key});
 
   @override
   State<SiteShell> createState() => _SiteShellState();
@@ -38,7 +42,7 @@ class _SiteShellState extends State<SiteShell> {
 
   @override
   Widget build(BuildContext context) {
-    final compact = MediaQuery.sizeOf(context).width < 820;
+    final compact = MediaQuery.sizeOf(context).width < 960;
     return Scaffold(
       body: Column(children: [
         _Header(current: _page, compact: compact, onSelect: _go),
@@ -46,7 +50,7 @@ class _SiteShellState extends State<SiteShell> {
           // Pages stay alive so the playground keeps its chat when switching menus.
           child: IndexedStack(index: _page.index, children: [
             const PlaygroundPage(),
-            ExamplesPage(demoScreenBuilder: widget.demoScreenBuilder),
+            const ExamplesPage(),
             GettingStartedPage(onOpenPlayground: () => _go(SitePage.playground)),
           ]),
         ),
@@ -64,6 +68,7 @@ class _Header extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
     return Container(
       height: 64,
       padding: EdgeInsets.symmetric(horizontal: compact ? 16 : 28),
@@ -79,45 +84,70 @@ class _Header extends StatelessWidget {
         ),
         if (!compact) ...[
           const SizedBox(width: 32),
-          for (final page in SitePage.values)
-            _NavItem(
-              label: page.label,
-              selected: page == current,
-              onTap: () => onSelect(page),
+          // Scrolls instead of overflowing when the window is just wide enough.
+          Expanded(
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(children: [
+                for (final page in SitePage.values)
+                  _NavItem(
+                    label: page.label(l),
+                    selected: page == current,
+                    onTap: () => onSelect(page),
+                  ),
+              ]),
             ),
-          const Spacer(),
-          const _VersionPill(),
+          ),
           const SizedBox(width: 12),
+          const _VersionPill(),
+          const SizedBox(width: 8),
+          const _LanguageSwitch(),
+          const SizedBox(width: 4),
           _LinkButton(label: 'pub.dev', url: _pubUrl),
           _LinkButton(label: 'GitHub', url: _githubUrl),
         ] else ...[
           const Spacer(),
           IconButton(
-            tooltip: '메뉴',
+            tooltip: l.menu,
             icon: const Icon(Icons.menu_rounded, color: SiteColors.grey800),
-            onPressed: () => _openMenu(context),
+            onPressed: () => _openMenu(context, l),
           ),
         ],
       ]),
     );
   }
 
-  void _openMenu(BuildContext context) {
+  void _openMenu(BuildContext context, AppLocalizations l) {
     showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
+      isScrollControlled: true,
       builder: (sheetContext) => SafeArea(
-        child: Padding(
+        child: SingleChildScrollView(
           padding: const EdgeInsets.fromLTRB(12, 0, 12, 16),
           child: Column(mainAxisSize: MainAxisSize.min, children: [
             for (final page in SitePage.values)
               _MenuRow(
                 icon: page.icon,
-                label: page.label,
+                label: page.label(l),
                 selected: page == current,
                 onTap: () {
                   Navigator.pop(sheetContext);
                   onSelect(page);
+                },
+              ),
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              child: Divider(),
+            ),
+            for (final entry in siteLanguageNames.entries)
+              _MenuRow(
+                icon: Icons.translate_rounded,
+                label: entry.value,
+                selected: siteLocale.value.languageCode == entry.key,
+                onTap: () {
+                  Navigator.pop(sheetContext);
+                  siteLocale.value = Locale(entry.key);
                 },
               ),
             const Padding(
@@ -150,17 +180,9 @@ class _Logo extends StatelessWidget {
   Widget build(BuildContext context) => Padding(
         padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 2),
         child: Row(mainAxisSize: MainAxisSize.min, children: [
-          Container(
-            width: 30,
-            height: 30,
-            decoration: BoxDecoration(
-              color: SiteColors.blue,
-              borderRadius: BorderRadius.circular(9),
-            ),
-            child: const Icon(Icons.chat_bubble_rounded, color: Colors.white, size: 16),
-          ),
-          const SizedBox(width: 10),
-          const Text('chat_toolkit',
+          Image.asset('assets/logo.png', width: 34, height: 34, filterQuality: FilterQuality.medium),
+          const SizedBox(width: 8),
+          const Text('Chat Toolkit',
               style: TextStyle(
                   fontSize: 17,
                   fontWeight: FontWeight.w700,
@@ -215,6 +237,46 @@ class _VersionPill extends StatelessWidget {
             style: TextStyle(
                 fontSize: 12, fontWeight: FontWeight.w600, color: SiteColors.blue)),
       );
+}
+
+/// Picks the site language.
+class _LanguageSwitch extends StatelessWidget {
+  const _LanguageSwitch();
+
+  @override
+  Widget build(BuildContext context) {
+    final current = Localizations.localeOf(context).languageCode;
+    return PopupMenuButton<String>(
+      tooltip: 'Language',
+      position: PopupMenuPosition.under,
+      color: Colors.white,
+      surfaceTintColor: Colors.transparent,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      onSelected: (code) => siteLocale.value = Locale(code),
+      itemBuilder: (_) => [
+        for (final entry in siteLanguageNames.entries)
+          PopupMenuItem(
+            value: entry.key,
+            child: Row(children: [
+              Expanded(child: Text(entry.value)),
+              if (entry.key == current)
+                const Icon(Icons.check_rounded, size: 18, color: SiteColors.blue),
+            ]),
+          ),
+      ],
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        child: Row(mainAxisSize: MainAxisSize.min, children: [
+          const Icon(Icons.translate_rounded, size: 18, color: SiteColors.grey700),
+          const SizedBox(width: 6),
+          Text(siteLanguageNames[current] ?? current,
+              style: const TextStyle(
+                  fontSize: 14, fontWeight: FontWeight.w500, color: SiteColors.grey700)),
+          const Icon(Icons.expand_more_rounded, size: 18, color: SiteColors.grey500),
+        ]),
+      ),
+    );
+  }
 }
 
 class _LinkButton extends StatelessWidget {

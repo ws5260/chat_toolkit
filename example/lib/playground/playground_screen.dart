@@ -1,41 +1,34 @@
 import 'package:chat_toolkit/chat_toolkit.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:intl/intl.dart';
 
+import '../l10n/app_localizations.dart';
 import '../rooms/fake_chat_server.dart';
 import '../site/site_theme.dart';
 
 /// How many messages the fake server holds for the preview room.
 enum PlaygroundHistory {
-  empty('없음', 0),
-  few('3건', 3),
-  page('60건', 60),
-  long('500건', 500);
+  empty(0),
+  few(3),
+  page(60),
+  long(500);
 
-  const PlaygroundHistory(this.label, this.total);
-  final String label;
+  const PlaygroundHistory(this.total);
   final int total;
 }
 
 /// What the fake server answers when a message is sent.
-enum PlaygroundSendResult {
-  success('성공'),
-  fail('실패'),
-  block('차단');
+enum PlaygroundSendResult { success, fail, block }
 
-  const PlaygroundSendResult(this.label);
-  final String label;
-}
-
-/// Every option the playground exposes. Changing [reverse], [history], [latencyMs] or [images]
-/// reloads the room; the rest apply live.
+/// Every option the playground exposes. Changing [history], [latencyMs] or [images] reloads the
+/// room; the rest apply live. The chat always runs reversed (newest message at offset 0).
 class PlaygroundSettings {
-  bool reverse = true;
   bool messagesStartAtTop = true;
   int appearMs = 250; // 0 = off
   ChatAlignment senderAlignment = ChatAlignment.end;
-  double horizontalPadding = 16;
-  double bubbleMaxWidth = 260; // >= _unlimitedWidth means no limit
+  double horizontalPadding = 24;
+  double bubbleMaxWidth = 420; // >= _unlimitedWidth means no limit
   double bubbleRadius = 18;
   Color senderColor = _palette.first;
   bool customTime = true;
@@ -55,7 +48,7 @@ class PlaygroundSettings {
   bool get unlimitedWidth => bubbleMaxWidth >= _unlimitedWidth;
 }
 
-const double _unlimitedWidth = 340;
+const double _unlimitedWidth = 640;
 
 const List<Color> _palette = [
   SiteColors.blue,
@@ -66,7 +59,7 @@ const List<Color> _palette = [
   SiteColors.grey900,
 ];
 
-/// Try the chat with live settings: a phone preview next to grouped settings cards (a toggle
+/// Try the chat with live settings: a large chat next to grouped settings cards (a toggle
 /// between them on narrow screens). Messages come from [FakeChatServer], so no backend is needed
 /// and the site can be served as static files.
 class PlaygroundPage extends StatefulWidget {
@@ -82,8 +75,9 @@ class _PlaygroundPageState extends State<PlaygroundPage> {
   final _textController = TextEditingController();
   final _inputFocusNode = FocusNode();
 
-  late ChatController _chatController;
+  ChatController? _controller;
   late RoomInfo _room;
+  String? _language;
   int _session = 0;
   bool _loadingInitial = true;
   bool _loadingOlder = false;
@@ -92,25 +86,34 @@ class _PlaygroundPageState extends State<PlaygroundPage> {
   bool _showSettings = false; // narrow layout only
 
   PlaygroundSettings get s => _settings;
+  ChatController get _chatController => _controller!;
+  AppLocalizations get l => AppLocalizations.of(context);
 
   @override
-  void initState() {
-    super.initState();
-    _openRoom();
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // The fake server writes its messages in the site language, so reload when it changes.
+    final language = Localizations.localeOf(context).languageCode;
+    if (language != _language) {
+      _language = language;
+      _replaceRoom();
+    }
   }
 
   @override
   void dispose() {
     _textController.dispose();
     _inputFocusNode.dispose();
-    _chatController.dispose();
+    _controller?.dispose();
     super.dispose();
   }
 
   // ---------------------------------------------------------------------------
   // Room loading (same flow as an app talking to a real server)
 
-  void _openRoom() {
+  /// Opens a fresh room; the old controller is disposed once its Chat is gone.
+  void _replaceRoom() {
+    final old = _controller;
     _session++;
     _room = RoomInfo(
       id: 'pg$_session',
@@ -120,22 +123,17 @@ class _PlaygroundPageState extends State<PlaygroundPage> {
       latency: Duration(milliseconds: s.latencyMs),
       imageRatio: s.images ? 0.3 : 0,
     );
-    _chatController = ChatController(
-      reverse: s.reverse,
+    _controller = ChatController(
       customSortCallback: (a, b) => a.timestamp.compareTo(b.timestamp),
     );
     _loadingInitial = true;
     _loadingOlder = false;
     _hasNoMoreMessage = s.history.total == 0;
     _loadInitialMessages(_session);
+    if (old != null) WidgetsBinding.instance.addPostFrameCallback((_) => old.dispose());
   }
 
-  void _reloadRoom() {
-    final old = _chatController;
-    setState(_openRoom);
-    // After the old Chat is gone.
-    WidgetsBinding.instance.addPostFrameCallback((_) => old.dispose());
-  }
+  void _reloadRoom() => setState(_replaceRoom);
 
   Future<void> _loadInitialMessages(int session) async {
     final messages =
@@ -175,9 +173,9 @@ class _PlaygroundPageState extends State<PlaygroundPage> {
     _chatController.dispatchMessage(
       ReceiverMessage(
         id: 'in_${DateTime.now().microsecondsSinceEpoch}',
-        name: '상담사',
+        name: _server.otherName,
         timestamp: DateTime.now().toIso8601String(),
-        elements: [DemoTextElement(text ?? '새로 도착한 메시지예요 ($_incomingCount)')],
+        elements: [DemoTextElement(text ?? l.incomingMessage(_incomingCount))],
       ),
       onDispatch: (m) async => m,
     );
@@ -190,9 +188,10 @@ class _PlaygroundPageState extends State<PlaygroundPage> {
     _textController.clear();
 
     final controller = _chatController;
+    final reply = l.autoReply(text);
     controller.dispatchMessage(
       SenderMessage(
-        name: '나',
+        name: _server.myName,
         timestamp: DateTime.now().toIso8601String(),
         elements: [DemoTextElement(text)],
         isRead: s.readIndicator ? false : null,
@@ -203,13 +202,13 @@ class _PlaygroundPageState extends State<PlaygroundPage> {
           case PlaygroundSendResult.fail:
             return null;
           case PlaygroundSendResult.block:
-            throw MessageBlockedException(code: 'BLOCKED', message: '차단된 메시지');
+            throw MessageBlockedException(code: 'BLOCKED', message: 'blocked');
           case PlaygroundSendResult.success:
             if (s.autoReply) {
               Future<void>.delayed(const Duration(milliseconds: 700), () {
-                if (identical(controller, _chatController) && !controller.isDisposed) {
+                if (identical(controller, _controller) && !controller.isDisposed) {
                   controller.updateMessageAllRead();
-                  _receive('"$text" 잘 받았어요.');
+                  _receive(reply);
                 }
               });
             }
@@ -222,136 +221,120 @@ class _PlaygroundPageState extends State<PlaygroundPage> {
   // ---------------------------------------------------------------------------
   // Configuration built from the settings
 
-  ChatConfiguration get _configuration => ChatConfiguration(
-        senderAlignment: s.senderAlignment,
-        padding: EdgeInsets.symmetric(horizontal: s.horizontalPadding),
-        messagesStartAtTop: s.messagesStartAtTop,
-        messageAppearAnimationDuration:
-            s.appearMs == 0 ? null : Duration(milliseconds: s.appearMs),
-        newReceiveMessageNotificationBuilder: s.newMessageNotification
-            ? (context, message, controller) => Padding(
-                  padding: const EdgeInsets.only(bottom: 12),
-                  child: Material(
-                    color: SiteColors.grey900,
+  ChatConfiguration _configuration(BuildContext context) {
+    final localeName = Localizations.localeOf(context).toLanguageTag();
+    return ChatConfiguration(
+      senderAlignment: s.senderAlignment,
+      padding: EdgeInsets.symmetric(horizontal: s.horizontalPadding),
+      messagesStartAtTop: s.messagesStartAtTop,
+      messageAppearAnimationDuration:
+          s.appearMs == 0 ? null : Duration(milliseconds: s.appearMs),
+      newReceiveMessageNotificationBuilder: s.newMessageNotification
+          ? (context, message, controller) => Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: Material(
+                  color: SiteColors.grey900,
+                  borderRadius: BorderRadius.circular(999),
+                  child: InkWell(
                     borderRadius: BorderRadius.circular(999),
-                    child: InkWell(
+                    onTap: controller.scrollToBottom,
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                      child: Row(mainAxisSize: MainAxisSize.min, children: [
+                        const Icon(Icons.arrow_downward_rounded, size: 16, color: Colors.white),
+                        const SizedBox(width: 6),
+                        Text(l.newMessageFrom(message.name),
+                            style: const TextStyle(color: Colors.white, fontSize: 13)),
+                      ]),
+                    ),
+                  ),
+                ),
+              )
+          : null,
+      dateSeparatorBuilder: s.customDateSeparator
+          ? (context, timestamp) => Padding(
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                child: Center(
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: SiteColors.grey100,
                       borderRadius: BorderRadius.circular(999),
-                      onTap: controller.scrollToBottom,
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                        child: Row(mainAxisSize: MainAxisSize.min, children: [
-                          const Icon(Icons.arrow_downward_rounded, size: 16, color: Colors.white),
-                          const SizedBox(width: 6),
-                          Text('${message.name}님의 새 메시지',
-                              style: const TextStyle(color: Colors.white, fontSize: 13)),
-                        ]),
-                      ),
                     ),
+                    child: Text(DateFormat.MMMEd(localeName).format(DateTime.parse(timestamp)),
+                        style: const TextStyle(fontSize: 12, color: SiteColors.grey600)),
                   ),
+                ),
+              )
+          : null,
+      readOnlyWidget: Container(
+        padding: const EdgeInsets.all(18),
+        alignment: Alignment.center,
+        color: SiteColors.grey50,
+        child: Text(l.readOnlyNotice,
+            style: const TextStyle(color: SiteColors.grey500, fontSize: 14)),
+      ),
+      bubbleConfiguration: BubbleConfiguration(
+        maxWidth: s.unlimitedWidth ? double.infinity : s.bubbleMaxWidth,
+        senderBubbleBuilder: (context, child) => _bubble(child, s.senderColor, Colors.white),
+        receiverBubbleBuilder: (context, child) =>
+            _bubble(child, SiteColors.grey100, SiteColors.grey900),
+        // My own messages need no avatar.
+        senderProfileBuilder: (context, name) => const SizedBox.shrink(),
+        timeBuilder: s.customTime
+            ? (context, timestamp) => Text(
+                  DateFormat.jm(localeName).format(DateTime.parse(timestamp)),
+                  style: const TextStyle(fontSize: 11, color: SiteColors.grey500),
                 )
             : null,
-        dateSeparatorBuilder: s.customDateSeparator
-            ? (context, timestamp) {
-                final t = DateTime.parse(timestamp);
-                return Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  child: Center(
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: SiteColors.grey100,
-                        borderRadius: BorderRadius.circular(999),
-                      ),
-                      child: Text('${t.month}월 ${t.day}일',
-                          style: const TextStyle(fontSize: 12, color: SiteColors.grey600)),
-                    ),
-                  ),
-                );
-              }
-            : null,
-        readOnlyWidget: Container(
-          padding: const EdgeInsets.all(18),
-          alignment: Alignment.center,
-          color: SiteColors.grey50,
-          child: const Text('상담이 끝나서 메시지를 보낼 수 없어요',
-              style: TextStyle(color: SiteColors.grey500, fontSize: 14)),
-        ),
-        bubbleConfiguration: BubbleConfiguration(
-          maxWidth: s.unlimitedWidth ? double.infinity : s.bubbleMaxWidth,
-          senderBubbleBuilder: (context, child) =>
-              _bubble(child, s.senderColor, Colors.white),
-          receiverBubbleBuilder: (context, child) =>
-              _bubble(child, SiteColors.grey100, SiteColors.grey900),
-          // My own messages need no avatar.
-          senderProfileBuilder: (context, name) => const SizedBox.shrink(),
-          timeBuilder: s.customTime
-              ? (context, timestamp) {
-                  final t = DateTime.parse(timestamp);
-                  final pm = t.hour >= 12;
-                  final h = t.hour % 12 == 0 ? 12 : t.hour % 12;
-                  return Text(
-                    '${pm ? '오후' : '오전'} $h:${t.minute.toString().padLeft(2, '0')}',
-                    style: const TextStyle(fontSize: 11, color: SiteColors.grey500),
-                  );
-                }
-              : null,
-          receiverProfileBuilder: s.receiverProfile
-              ? (context, name) => Padding(
-                    padding: const EdgeInsets.only(bottom: 6),
-                    child: Row(mainAxisSize: MainAxisSize.min, children: [
-                      Container(
-                        width: 28,
-                        height: 28,
-                        alignment: Alignment.center,
-                        decoration: BoxDecoration(
-                          color: SiteColors.blueWeak,
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: const Icon(Icons.support_agent_rounded,
-                            size: 16, color: SiteColors.blue),
-                      ),
-                      const SizedBox(width: 8),
-                      Text(name,
-                          style: const TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w600,
-                              color: SiteColors.grey700)),
-                    ]),
-                  )
-              : null,
-          readIndicatorBuilder: s.readIndicator
-              ? (context, isRead) => isRead
-                  ? const SizedBox.shrink()
-                  : const Text('1',
-                      style: TextStyle(
-                          fontSize: 11, color: SiteColors.blue, fontWeight: FontWeight.w700))
-              : null,
-          menuConfiguration: s.bubbleMenu
-              ? BubbleMenuConfiguration(
-                  color: Colors.white,
-                  elevation: 3,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                  senderItemsBuilder: (context, request) => [
-                    if (request.message.isFailed)
-                      _menuItem('다시 보내기', Icons.refresh_rounded,
-                          (_, r) => _chatController.retryMessage(r.message)),
-                    _menuItem('삭제하기', Icons.delete_outline_rounded,
-                        (_, r) => _chatController.removeMessageEverywhere(r.message),
-                        danger: true),
-                  ],
-                  receiverItemsBuilder: (context, request) => [
-                    _menuItem('복사하기', Icons.copy_rounded, (ctx, r) {
-                      Clipboard.setData(ClipboardData(
-                          text: r.message.elements
-                              .whereType<DemoTextElement>()
-                              .map((e) => e.text)
-                              .join('\n')));
-                    }),
-                  ],
+        receiverProfileBuilder: s.receiverProfile
+            ? (context, name) => Padding(
+                  padding: const EdgeInsets.only(bottom: 6),
+                  child: Row(mainAxisSize: MainAxisSize.min, children: [
+                    _Avatar(name: name, size: 28),
+                    const SizedBox(width: 8),
+                    Text(name,
+                        style: const TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: SiteColors.grey700)),
+                  ]),
                 )
-              : null,
-        ),
-      );
+            : null,
+        readIndicatorBuilder: s.readIndicator
+            ? (context, isRead) => isRead
+                ? const SizedBox.shrink()
+                : const Text('1',
+                    style: TextStyle(
+                        fontSize: 11, color: SiteColors.blue, fontWeight: FontWeight.w700))
+            : null,
+        menuConfiguration: s.bubbleMenu
+            ? BubbleMenuConfiguration(
+                color: Colors.white,
+                elevation: 3,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                senderItemsBuilder: (context, request) => [
+                  if (request.message.isFailed)
+                    _menuItem(l.menuRetry, Icons.refresh_rounded,
+                        (_, r) => _chatController.retryMessage(r.message)),
+                  _menuItem(l.menuDelete, Icons.delete_outline_rounded,
+                      (_, r) => _chatController.removeMessageEverywhere(r.message),
+                      danger: true),
+                ],
+                receiverItemsBuilder: (context, request) => [
+                  _menuItem(l.menuCopy, Icons.copy_rounded, (ctx, r) {
+                    Clipboard.setData(ClipboardData(
+                        text: r.message.elements
+                            .whereType<DemoTextElement>()
+                            .map((e) => e.text)
+                            .join('\n')));
+                  }),
+                ],
+              )
+            : null,
+      ),
+    );
+  }
 
   BubbleMenuItem _menuItem(String label, IconData icon, BubbleMenuItemCallback onSelected,
           {bool danger = false}) =>
@@ -359,8 +342,8 @@ class _PlaygroundPageState extends State<PlaygroundPage> {
         label: label,
         icon: Icon(icon, size: 18, color: danger ? SiteColors.red : SiteColors.grey600),
         height: 40,
-        textStyle: TextStyle(
-            fontSize: 14, color: danger ? SiteColors.red : SiteColors.grey900),
+        textStyle:
+            TextStyle(fontSize: 14, color: danger ? SiteColors.red : SiteColors.grey900),
         onSelected: onSelected,
       );
 
@@ -389,18 +372,14 @@ class _PlaygroundPageState extends State<PlaygroundPage> {
 
   Widget _wide() => Center(
         child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 1160),
+          constraints: const BoxConstraints(maxWidth: 1440),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Expanded(
                 child: Padding(
-                  padding: const EdgeInsets.fromLTRB(24, 32, 24, 24),
-                  child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-                    Flexible(child: PhoneFrame(child: _phoneScreen())),
-                    const SizedBox(height: 20),
-                    _previewActions(),
-                  ]),
+                  padding: const EdgeInsets.fromLTRB(28, 28, 12, 28),
+                  child: _chatCard(compact: false),
                 ),
               ),
               SizedBox(width: 460, child: _settingsList(withIntro: true)),
@@ -414,86 +393,88 @@ class _PlaygroundPageState extends State<PlaygroundPage> {
           padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
           child: SegmentedChoice<bool>(
             value: _showSettings,
-            options: const {false: '미리보기', true: '설정'},
+            options: {false: l.preview, true: l.settings},
             onChanged: (v) => setState(() => _showSettings = v),
           ),
         ),
         Expanded(
           // IndexedStack keeps the chat alive while the settings are shown.
           child: IndexedStack(index: _showSettings ? 1 : 0, children: [
-            Column(children: [
-              Expanded(
-                child: Container(
-                  margin: const EdgeInsets.fromLTRB(16, 8, 16, 12),
-                  clipBehavior: Clip.antiAlias,
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(24),
-                    boxShadow: SiteShadows.card,
-                  ),
-                  child: _phoneScreen(),
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-                child: _previewActions(),
-              ),
-            ]),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+              child: _chatCard(compact: true),
+            ),
             _settingsList(withIntro: false),
           ]),
         ),
       ]);
 
-  Widget _previewActions() => Wrap(
-        spacing: 8,
-        runSpacing: 8,
-        alignment: WrapAlignment.center,
-        children: [
-          SiteButton(
-              label: '메시지 받기',
-              icon: Icons.mark_chat_unread_outlined,
-              primary: true,
-              onPressed: _receive),
-          SiteButton(
-              label: '모두 읽음',
-              icon: Icons.done_all_rounded,
-              onPressed: () => _chatController.updateMessageAllRead()),
-          SiteButton(label: '처음부터', icon: Icons.refresh_rounded, onPressed: _reloadRoom),
-        ],
+  Widget _chatCard({required bool compact}) => Container(
+        clipBehavior: Clip.antiAlias,
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(24),
+          boxShadow: SiteShadows.card,
+        ),
+        child: Column(children: [
+          _chatHeader(compact),
+          const Divider(height: 1, color: SiteColors.grey100),
+          Expanded(child: _chat()),
+        ]),
       );
 
-  Widget _phoneScreen() => Column(children: [
-        Container(
-          height: 60,
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          decoration: const BoxDecoration(
-            border: Border(bottom: BorderSide(color: SiteColors.grey100)),
-          ),
-          child: Row(children: [
-            const Icon(Icons.arrow_back_ios_new_rounded, size: 18, color: SiteColors.grey700),
-            const SizedBox(width: 12),
-            const Expanded(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('상담사',
-                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
-                  Text('보통 1분 안에 답해요',
-                      style: TextStyle(fontSize: 12, color: SiteColors.grey500)),
-                ],
+  Widget _chatHeader(bool compact) {
+    final actions = [
+      (l.receiveMessage, Icons.mark_chat_unread_outlined, () => _receive(), true),
+      (l.markAllRead, Icons.done_all_rounded, () => _chatController.updateMessageAllRead(), false),
+      (l.restart, Icons.refresh_rounded, _reloadRoom, false),
+    ];
+    return Padding(
+      padding: EdgeInsets.symmetric(horizontal: compact ? 12 : 20, vertical: 12),
+      child: Row(children: [
+        _Avatar(name: _server.otherName, size: 40),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(_server.otherName,
+                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+            Row(children: [
+              Container(
+                width: 7,
+                height: 7,
+                decoration: const BoxDecoration(
+                    color: Color(0xFF15B886), shape: BoxShape.circle),
               ),
-            ),
-            if (_loadingInitial || _loadingOlder)
-              const SizedBox(
-                width: 16,
-                height: 16,
-                child: CircularProgressIndicator(strokeWidth: 2, color: SiteColors.blue),
-              ),
+              const SizedBox(width: 5),
+              Text(l.online,
+                  style: const TextStyle(fontSize: 12, color: SiteColors.grey500)),
+            ]),
           ]),
         ),
-        Expanded(child: _chat()),
-      ]);
+        if (_loadingInitial || _loadingOlder)
+          const Padding(
+            padding: EdgeInsets.only(right: 12),
+            child: SizedBox(
+              width: 16,
+              height: 16,
+              child: CircularProgressIndicator(strokeWidth: 2, color: SiteColors.blue),
+            ),
+          ),
+        for (final (label, icon, onTap, primary) in actions)
+          Padding(
+            padding: const EdgeInsets.only(left: 6),
+            child: compact
+                ? IconButton(
+                    tooltip: label,
+                    onPressed: onTap,
+                    icon: Icon(icon, size: 20),
+                    color: primary ? SiteColors.blue : SiteColors.grey600,
+                  )
+                : SiteButton(label: label, icon: icon, primary: primary, onPressed: onTap),
+          ),
+      ]),
+    );
+  }
 
   Widget _chat() {
     if (_loadingInitial) {
@@ -506,12 +487,12 @@ class _PlaygroundPageState extends State<PlaygroundPage> {
       key: ObjectKey(_chatController),
       chatController: _chatController,
       readOnly: s.readOnly,
-      configuration: _configuration,
+      configuration: _configuration(context),
       onScrollToTop: _onScrollToTop,
       customInputField: (context, controller) => SafeArea(
         top: false,
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
           child: Row(children: [
             Expanded(
               child: TextField(
@@ -523,11 +504,11 @@ class _PlaygroundPageState extends State<PlaygroundPage> {
                 style: const TextStyle(fontSize: 15),
                 decoration: InputDecoration(
                   isDense: true,
-                  hintText: '메시지를 입력해 주세요',
+                  hintText: l.inputHint,
                   hintStyle: const TextStyle(color: SiteColors.grey400),
                   filled: true,
                   fillColor: SiteColors.grey100,
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(999),
                     borderSide: BorderSide.none,
@@ -543,9 +524,9 @@ class _PlaygroundPageState extends State<PlaygroundPage> {
                 customBorder: const CircleBorder(),
                 onTap: _send,
                 child: const SizedBox(
-                  width: 42,
-                  height: 42,
-                  child: Icon(Icons.arrow_upward_rounded, color: Colors.white, size: 20),
+                  width: 46,
+                  height: 46,
+                  child: Icon(Icons.arrow_upward_rounded, color: Colors.white, size: 22),
                 ),
               ),
             ),
@@ -570,54 +551,92 @@ class _PlaygroundPageState extends State<PlaygroundPage> {
   Widget _settingsList({required bool withIntro}) {
     return ListView(
       key: const Key('playground-settings'),
-      padding: EdgeInsets.fromLTRB(16, withIntro ? 32 : 8, 16, 48),
+      // Extra right padding keeps the cards clear of the scrollbar.
+      padding: EdgeInsets.fromLTRB(16, withIntro ? 28 : 8, 28, 48),
       children: [
         if (withIntro) ...[
-          Text('플레이그라운드', style: Theme.of(context).textTheme.headlineMedium),
+          Text(l.navPlayground, style: Theme.of(context).textTheme.headlineMedium),
           const SizedBox(height: 8),
-          const Text(
-            '옵션을 바꾸면 왼쪽 채팅에 바로 반영돼요.\n메시지는 가짜 서버에서 불러오니 마음껏 보내 보세요.',
-            style: TextStyle(fontSize: 15, color: SiteColors.grey600, height: 1.6),
-          ),
+          Text(l.playgroundIntro,
+              style: const TextStyle(fontSize: 15, color: SiteColors.grey600, height: 1.6)),
           const SizedBox(height: 24),
         ],
-        _group('레이아웃', [
-          _SwitchRow(
-            title: '최신 메시지를 offset 0에',
-            api: 'ChatController(reverse:)',
-            description: '바꾸면 채팅방을 다시 불러와요',
-            value: s.reverse,
-            onChanged: (v) => _set(() => s.reverse = v, reload: true),
+        _group(l.sectionServer, [
+          _FieldRow(
+            title: l.storedMessages,
+            child: SegmentedChoice<PlaygroundHistory>(
+              value: s.history,
+              options: {
+                for (final h in PlaygroundHistory.values)
+                  h: h.total == 0 ? l.none : l.messageCount(h.total),
+              },
+              onChanged: (v) => _set(() => s.history = v, reload: true),
+            ),
+          ),
+          _SliderRow(
+            title: l.responseTime,
+            valueLabel: l.seconds((s.latencyMs / 1000).toStringAsFixed(1)),
+            value: s.latencyMs.toDouble(),
+            min: 0,
+            max: 3000,
+            onChanged: (v) => setState(() => s.latencyMs = (v / 100).round() * 100),
+            onChangeEnd: (_) => _reloadRoom(),
           ),
           _SwitchRow(
-            title: '메시지가 적으면 위에서부터',
+            title: l.imagesTitle,
+            description: l.imagesDesc,
+            value: s.images,
+            onChanged: (v) => _set(() => s.images = v, reload: true),
+          ),
+          _FieldRow(
+            title: l.sendResult,
+            child: SegmentedChoice<PlaygroundSendResult>(
+              value: s.sendResult,
+              options: {
+                PlaygroundSendResult.success: l.resultSuccess,
+                PlaygroundSendResult.fail: l.resultFail,
+                PlaygroundSendResult.block: l.resultBlock,
+              },
+              onChanged: (v) => _set(() => s.sendResult = v),
+            ),
+          ),
+          _SwitchRow(
+            title: l.autoReplyTitle,
+            description: l.autoReplyDesc,
+            value: s.autoReply,
+            onChanged: (v) => _set(() => s.autoReply = v),
+          ),
+        ]),
+        _group(l.sectionLayout, [
+          _SwitchRow(
+            title: l.startAtTopTitle,
             api: 'messagesStartAtTop',
-            description: 'reverse 일 때만 적용돼요',
+            description: l.startAtTopDesc,
             value: s.messagesStartAtTop,
             onChanged: (v) => _set(() => s.messagesStartAtTop = v),
           ),
           _FieldRow(
-            title: '내 메시지 위치',
+            title: l.senderSideTitle,
             api: 'senderAlignment',
             child: SegmentedChoice<ChatAlignment>(
               value: s.senderAlignment,
-              options: const {ChatAlignment.end: '오른쪽', ChatAlignment.start: '왼쪽'},
+              options: {ChatAlignment.end: l.sideRight, ChatAlignment.start: l.sideLeft},
               onChanged: (v) => _set(() => s.senderAlignment = v),
             ),
           ),
           _SliderRow(
-            title: '좌우 여백',
+            title: l.sidePadding,
             api: 'padding',
             valueLabel: '${s.horizontalPadding.round()}px',
             value: s.horizontalPadding,
             min: 0,
-            max: 40,
+            max: 64,
             onChanged: (v) => _set(() => s.horizontalPadding = v),
           ),
         ]),
-        _group('말풍선', [
+        _group(l.sectionBubble, [
           _FieldRow(
-            title: '내 말풍선 색',
+            title: l.bubbleColor,
             child: Wrap(spacing: 10, runSpacing: 10, children: [
               for (final c in _palette)
                 GestureDetector(
@@ -642,7 +661,7 @@ class _PlaygroundPageState extends State<PlaygroundPage> {
             ]),
           ),
           _SliderRow(
-            title: '모서리 둥글기',
+            title: l.cornerRadius,
             valueLabel: '${s.bubbleRadius.round()}px',
             value: s.bubbleRadius,
             min: 0,
@@ -650,109 +669,70 @@ class _PlaygroundPageState extends State<PlaygroundPage> {
             onChanged: (v) => _set(() => s.bubbleRadius = v),
           ),
           _SliderRow(
-            title: '최대 너비',
+            title: l.maxWidth,
             api: 'maxWidth',
-            valueLabel: s.unlimitedWidth ? '제한 없음' : '${s.bubbleMaxWidth.round()}px',
+            valueLabel: s.unlimitedWidth ? l.noLimit : '${s.bubbleMaxWidth.round()}px',
             value: s.bubbleMaxWidth,
-            min: 160,
+            min: 200,
             max: _unlimitedWidth,
             onChanged: (v) => _set(() => s.bubbleMaxWidth = v),
           ),
           _FieldRow(
-            title: '등장 애니메이션',
+            title: l.appearAnimation,
             api: 'messageAppearAnimationDuration',
             child: SegmentedChoice<int>(
               value: s.appearMs,
-              options: const {0: '끄기', 150: '150ms', 250: '250ms', 500: '500ms'},
+              options: {0: l.off, 150: '150ms', 250: '250ms', 500: '500ms'},
               onChanged: (v) => _set(() => s.appearMs = v),
             ),
           ),
         ]),
-        _group('표시 요소', [
+        _group(l.sectionDisplay, [
           _SwitchRow(
-            title: '보낸 시간',
+            title: l.timeTitle,
             api: 'timeBuilder',
-            description: '끄면 기본 형식으로 보여요',
+            description: l.timeDesc,
             value: s.customTime,
             onChanged: (v) => _set(() => s.customTime = v),
           ),
           _SwitchRow(
-            title: '상대 프로필',
+            title: l.profileTitle,
             api: 'receiverProfileBuilder',
             value: s.receiverProfile,
             onChanged: (v) => _set(() => s.receiverProfile = v),
           ),
           _SwitchRow(
-            title: '안 읽음 표시',
+            title: l.unreadTitle,
             api: 'readIndicatorBuilder',
-            description: '새로 보내는 메시지부터 보여요',
+            description: l.unreadDesc,
             value: s.readIndicator,
             onChanged: (v) => _set(() => s.readIndicator = v),
           ),
           _SwitchRow(
-            title: '길게 눌러 메뉴 열기',
+            title: l.longPressMenuTitle,
             api: 'menuConfiguration',
             value: s.bubbleMenu,
             onChanged: (v) => _set(() => s.bubbleMenu = v),
           ),
           _SwitchRow(
-            title: '새 메시지 알림',
+            title: l.notificationTitle,
             api: 'newReceiveMessageNotificationBuilder',
-            description: '위로 올려 둔 채 메시지를 받으면 보여요',
+            description: l.notificationDesc,
             value: s.newMessageNotification,
             onChanged: (v) => _set(() => s.newMessageNotification = v),
           ),
           _SwitchRow(
-            title: '날짜 구분선 꾸미기',
+            title: l.dateSeparatorTitle,
             api: 'dateSeparatorBuilder',
             value: s.customDateSeparator,
             onChanged: (v) => _set(() => s.customDateSeparator = v),
           ),
           _SwitchRow(
-            title: '읽기 전용',
+            title: l.readOnlyTitle,
             api: 'readOnly',
-            description: '입력창 대신 안내 문구를 보여요',
+            description: l.readOnlyDesc,
             value: s.readOnly,
             onChanged: (v) => _set(() => s.readOnly = v),
-          ),
-        ]),
-        _group('가짜 서버', [
-          _FieldRow(
-            title: '저장된 메시지',
-            child: SegmentedChoice<PlaygroundHistory>(
-              value: s.history,
-              options: {for (final h in PlaygroundHistory.values) h: h.label},
-              onChanged: (v) => _set(() => s.history = v, reload: true),
-            ),
-          ),
-          _SliderRow(
-            title: '응답 시간',
-            valueLabel: '${(s.latencyMs / 1000).toStringAsFixed(1)}초',
-            value: s.latencyMs.toDouble(),
-            min: 0,
-            max: 3000,
-            onChanged: (v) => setState(() => s.latencyMs = (v / 100).round() * 100),
-            onChangeEnd: (_) => _reloadRoom(),
-          ),
-          _SwitchRow(
-            title: '이미지 메시지 섞기',
-            description: '30%가 늦게 로드되는 이미지예요',
-            value: s.images,
-            onChanged: (v) => _set(() => s.images = v, reload: true),
-          ),
-          _FieldRow(
-            title: '보내기 결과',
-            child: SegmentedChoice<PlaygroundSendResult>(
-              value: s.sendResult,
-              options: {for (final r in PlaygroundSendResult.values) r: r.label},
-              onChanged: (v) => _set(() => s.sendResult = v),
-            ),
-          ),
-          _SwitchRow(
-            title: '자동 답장',
-            description: '보내기에 성공하면 상대가 읽고 답해요',
-            value: s.autoReply,
-            onChanged: (v) => _set(() => s.autoReply = v),
           ),
         ]),
       ],
@@ -768,6 +748,32 @@ class _PlaygroundPageState extends State<PlaygroundPage> {
             const SizedBox(height: 4),
             ...rows,
           ]),
+        ),
+      );
+}
+
+class _Avatar extends StatelessWidget {
+  const _Avatar({required this.name, required this.size});
+
+  final String name;
+  final double size;
+
+  @override
+  Widget build(BuildContext context) => Container(
+        width: size,
+        height: size,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: SiteColors.blueWeak,
+          borderRadius: BorderRadius.circular(size * 0.36),
+        ),
+        child: Text(
+          name.characters.first,
+          style: TextStyle(
+            fontSize: size * 0.42,
+            fontWeight: FontWeight.w700,
+            color: SiteColors.blue,
+          ),
         ),
       );
 }
@@ -939,6 +945,7 @@ class SegmentedChoice<T> extends StatelessWidget {
           for (final entry in options.entries)
             Expanded(
               child: GestureDetector(
+                key: ValueKey('segment-${entry.key}'),
                 behavior: HitTestBehavior.opaque,
                 onTap: () => onChanged(entry.key),
                 child: AnimatedContainer(

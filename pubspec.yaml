@@ -1,7 +1,10 @@
 name: chat_toolkit
 description: "A comprehensive and customizable chat widget toolkit for Flutter applications with message handling, real-time updates, and extensive customization options."
-version: 1.7.0
+version: 2.0.0
 repository: https://github.com/ws5260/chat_toolkit
+screenshots:
+  - description: The Chat Toolkit logo.
+    path: doc/logo.png
 
 environment:
   sdk: ^3.12.0

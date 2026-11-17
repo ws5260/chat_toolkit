@@ -159,30 +159,3 @@ class SiteButton extends StatelessWidget {
     );
   }
 }
-
-/// A phone-shaped frame around [child].
-class PhoneFrame extends StatelessWidget {
-  const PhoneFrame({super.key, required this.child});
-
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) => ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 390, maxHeight: 780),
-        child: AspectRatio(
-          aspectRatio: 390 / 780,
-          child: Container(
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              color: SiteColors.grey900,
-              borderRadius: BorderRadius.circular(44),
-              boxShadow: SiteShadows.raised,
-            ),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(34),
-              child: ColoredBox(color: Colors.white, child: child),
-            ),
-          ),
-        ),
-      );
-}
