@@ -435,3 +435,15 @@ fix: Add missing filename configuration for web platform
 ### 변경
 
 - `MessageBubble` 이 최신 Flutter 에서 deprecated 된 `package:flutter/material.dart` 대신 `package:flutter/widgets.dart` 를 import 합니다.
+
+## 2.2.0
+
+### Changed
+
+- Requires Flutter 3.47.0 or later (Dart 3.13). Apps on older Flutter versions keep resolving to 2.1.1.
+- Migrated from the deprecated `package:flutter/material.dart` to the [`material_ui`](https://pub.dev/packages/material_ui) package, which Flutter split out of the framework.
+
+### 변경
+
+- Flutter 3.47.0 이상(Dart 3.13)이 필요합니다. 이전 Flutter 버전을 쓰는 앱은 계속 2.1.1 을 받습니다.
+- deprecated 된 `package:flutter/material.dart` 대신, Flutter 에서 분리된 [`material_ui`](https://pub.dev/packages/material_ui) 패키지를 사용합니다.

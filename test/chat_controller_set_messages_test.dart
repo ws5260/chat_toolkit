@@ -1,7 +1,7 @@
 import 'package:chat_toolkit/chat_toolkit.dart';
 import 'package:chat_toolkit/src/chat_controller.dart' show ChatControllerInternal;
-import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:material_ui/material_ui.dart';
 
 class _TextElement extends MessageElement {
   const _TextElement(this.text);

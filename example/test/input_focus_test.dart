@@ -1,6 +1,6 @@
 import 'package:example/main.dart';
-import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:material_ui/material_ui.dart';
 
 bool inputHasFocus(WidgetTester tester) =>
     tester.widget<TextField>(find.byType(TextField)).focusNode!.hasFocus;

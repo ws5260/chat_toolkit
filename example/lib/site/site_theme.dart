@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// Colors of the demo site: near-neutral cool greys with one blue accent.
 abstract final class SiteColors {

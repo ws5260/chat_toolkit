@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// Retry/delete action pair attached to a bubble whose send failed.
 ///

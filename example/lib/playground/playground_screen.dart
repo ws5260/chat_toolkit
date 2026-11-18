@@ -1,7 +1,7 @@
 import 'package:chat_toolkit/chat_toolkit.dart';
-import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
+import 'package:material_ui/material_ui.dart';
 
 import '../l10n/app_localizations.dart';
 import '../rooms/fake_chat_server.dart';

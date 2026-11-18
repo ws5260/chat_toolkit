@@ -1,5 +1,6 @@
-import 'package:flutter/material.dart';
 import 'package:gap/gap.dart';
+import 'package:material_ui/material_ui.dart';
+
 import 'bubble_menu.dart';
 import 'entity/message.dart';
 import 'message_failed.dart';

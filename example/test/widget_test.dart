@@ -1,9 +1,8 @@
 // Smoke tests for the Chat Toolkit demo app.
 
-import 'package:flutter/material.dart';
-import 'package:flutter_test/flutter_test.dart';
-
 import 'package:example/main.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:material_ui/material_ui.dart';
 
 // The app opens on the room list; the original demo is one entry in it.
 Future<void> openDemo(WidgetTester tester) async {

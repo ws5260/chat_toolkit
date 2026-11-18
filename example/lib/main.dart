@@ -1,6 +1,8 @@
 import 'package:chat_toolkit/chat_toolkit.dart';
-import 'package:flutter/material.dart';
+import 'package:cupertino_ui/cupertino_ui.dart' show GlobalCupertinoLocalizations;
 import 'package:flutter/services.dart';
+import 'package:flutter_localizations/flutter_localizations.dart' show GlobalWidgetsLocalizations;
+import 'package:material_ui/material_ui.dart';
 
 import 'l10n/app_localizations.dart';
 import 'rooms/fake_chat_server.dart';
@@ -35,7 +37,15 @@ class MyApp extends StatelessWidget {
           debugShowCheckedModeBanner: false,
           theme: buildSiteTheme(),
           locale: locale,
-          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          // Not AppLocalizations.localizationsDelegates: `flutter gen-l10n`
+          // still lists the flutter_localizations delegates, which do not
+          // provide the material_ui / cupertino_ui localizations.
+          localizationsDelegates: const [
+            AppLocalizations.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+          ],
           supportedLocales: AppLocalizations.supportedLocales,
           home: switch (home) {
             AppHome.site => const SiteShell(),

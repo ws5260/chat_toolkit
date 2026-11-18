@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// Called when the size of a [SizeDetectedWidget] changes.
 typedef SizeDetectedCallback = void Function(Size? oldSize, Size? newSize);

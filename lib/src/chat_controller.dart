@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:collection';
 
 import 'package:flutter/foundation.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'message/entity/failed_message_entry.dart';
 import 'message/entity/message.dart';
 import 'message/entity/message_group.dart';

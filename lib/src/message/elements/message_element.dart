@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// A piece of content inside a [Message], such as text, an image or a file.
 ///

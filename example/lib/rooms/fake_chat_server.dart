@@ -1,7 +1,7 @@
 import 'dart:math';
 
 import 'package:chat_toolkit/chat_toolkit.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// A chat room served by [FakeChatServer].
 class RoomInfo {

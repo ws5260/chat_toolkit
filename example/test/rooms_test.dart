@@ -1,7 +1,7 @@
 import 'package:example/main.dart';
 import 'package:example/rooms/fake_chat_server.dart';
-import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:material_ui/material_ui.dart';
 
 void main() {
   Future<void> openRoom(WidgetTester tester, RoomInfo room) async {
