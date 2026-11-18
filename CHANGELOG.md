@@ -425,3 +425,13 @@ fix: Add missing filename configuration for web platform
 
 - `MessageGroup` 을 export 합니다.
 - API 문서를 보강했습니다.
+
+## 2.1.1
+
+### Changed
+
+- `MessageBubble` now imports `package:flutter/widgets.dart` instead of `package:flutter/material.dart`, which is deprecated in newer Flutter versions.
+
+### 변경
+
+- `MessageBubble` 이 최신 Flutter 에서 deprecated 된 `package:flutter/material.dart` 대신 `package:flutter/widgets.dart` 를 import 합니다.
