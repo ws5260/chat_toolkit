@@ -8,7 +8,10 @@ import 'getting_started_page.dart';
 import 'site_locale.dart';
 import 'site_theme.dart';
 
-const _version = '2.0.0';
+/// The chat_toolkit version shown in the header. CI passes it from the root
+/// pubspec.yaml with `--dart-define=CHAT_TOOLKIT_VERSION=...`; local runs
+/// without it show `dev`.
+const _version = String.fromEnvironment('CHAT_TOOLKIT_VERSION', defaultValue: 'dev');
 final _pubUrl = Uri.parse('https://pub.dev/packages/chat_toolkit');
 final _githubUrl = Uri.parse('https://github.com/ws5260/chat_toolkit');
 
@@ -233,7 +236,7 @@ class _VersionPill extends StatelessWidget {
           color: SiteColors.blueWeak,
           borderRadius: BorderRadius.circular(999),
         ),
-        child: const Text('v$_version',
+        child: const Text(_version == 'dev' ? _version : 'v$_version',
             style: TextStyle(
                 fontSize: 12, fontWeight: FontWeight.w600, color: SiteColors.blue)),
       );

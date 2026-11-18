@@ -29,7 +29,9 @@ jobs:
         working-directory: example
         run: |
           flutter pub get
-          flutter build web --release --base-href "/${{ github.event.repository.name }}/"
+          VERSION=$(sed -n 's/^version: *//p' ../pubspec.yaml)
+          flutter build web --release --base-href "/${{ github.event.repository.name }}/" \
+            --dart-define=CHAT_TOOLKIT_VERSION="$VERSION"
       - uses: actions/upload-pages-artifact@v5
         with:
           path: example/build/web
