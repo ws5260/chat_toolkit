@@ -92,7 +92,7 @@ void main() {
     await tester.tap(find.text('한국어').last);
     await tester.pump(const Duration(seconds: 1));
     await tester.pumpAndSettle();
-    expect(find.text('레이아웃'), findsOneWidget);
+    expect(find.text('컴포넌트 디자인'), findsOneWidget);
     expect(find.text('민지'), findsWidgets);
   });
 }

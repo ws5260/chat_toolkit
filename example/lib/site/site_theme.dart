@@ -30,7 +30,16 @@ abstract final class SiteShadows {
   ];
 }
 
-ThemeData buildSiteTheme() {
+/// Bundled Noto Sans subsets (assets/fonts), so text never waits for fonts fetched at runtime.
+/// Han characters are drawn differently per language, so the site language's CJK font comes
+/// first.
+List<String> siteFontFallback(String languageCode) => switch (languageCode) {
+      'ja' => const ['NotoSansJP', 'NotoSansKR', 'NotoSansSC'],
+      'zh' => const ['NotoSansSC', 'NotoSansJP', 'NotoSansKR'],
+      _ => const ['NotoSansKR', 'NotoSansJP', 'NotoSansSC'],
+    };
+
+ThemeData buildSiteTheme({String languageCode = 'en'}) {
   final scheme = ColorScheme.fromSeed(
     seedColor: SiteColors.blue,
     primary: SiteColors.blue,
@@ -48,6 +57,8 @@ ThemeData buildSiteTheme() {
   );
   return ThemeData(
     useMaterial3: true,
+    fontFamily: 'NotoSans',
+    fontFamilyFallback: siteFontFallback(languageCode),
     colorScheme: scheme,
     scaffoldBackgroundColor: SiteColors.background,
     textTheme: textTheme.apply(

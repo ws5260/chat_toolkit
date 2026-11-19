@@ -35,7 +35,7 @@ class MyApp extends StatelessWidget {
         return MaterialApp(
           title: 'chat_toolkit',
           debugShowCheckedModeBanner: false,
-          theme: buildSiteTheme(),
+          theme: buildSiteTheme(languageCode: locale.languageCode),
           locale: locale,
           // Not AppLocalizations.localizationsDelegates: `flutter gen-l10n`
           // still lists the flutter_localizations delegates, which do not

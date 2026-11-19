@@ -1,5 +1,6 @@
 // ignore: unused_import
 import 'package:intl/intl.dart' as intl;
+
 import 'app_localizations.dart';
 
 // ignore_for_file: type=lint
@@ -93,13 +94,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get sidePadding => '좌우 여백';
 
   @override
-  String get sectionBubble => '말풍선';
-
-  @override
   String get bubbleColor => '내 말풍선 색';
-
-  @override
-  String get cornerRadius => '모서리 둥글기';
 
   @override
   String get maxWidth => '최대 너비';
@@ -112,36 +107,6 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get off => '끄기';
-
-  @override
-  String get sectionDisplay => '표시 요소';
-
-  @override
-  String get timeTitle => '보낸 시간';
-
-  @override
-  String get timeDesc => '끄면 기본 형식으로 보여요';
-
-  @override
-  String get profileTitle => '상대 프로필';
-
-  @override
-  String get unreadTitle => '안 읽음 표시';
-
-  @override
-  String get unreadDesc => '새로 보내는 메시지부터 보여요';
-
-  @override
-  String get longPressMenuTitle => '길게 눌러 메뉴 열기';
-
-  @override
-  String get notificationTitle => '새 메시지 알림';
-
-  @override
-  String get notificationDesc => '위로 올려 둔 채 메시지를 받으면 보여요';
-
-  @override
-  String get dateSeparatorTitle => '날짜 구분선 꾸미기';
 
   @override
   String get readOnlyTitle => '읽기 전용';
@@ -272,4 +237,445 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get copied => '복사했어요';
+
+  @override
+  String get search => '검색';
+
+  @override
+  String get searchHint => '메시지 검색';
+
+  @override
+  String get searchNoResults => '결과 없음';
+
+  @override
+  String get searchOlder => '이전 결과';
+
+  @override
+  String get searchNewer => '다음 결과';
+
+  @override
+  String get closeSearch => '검색 닫기';
+
+  @override
+  String get jumpToLatest => '최신 메시지로';
+
+  @override
+  String get receiverBubbleColor => '상대 말풍선 색';
+
+  @override
+  String get groupingTitle => '메시지 묶기';
+
+  @override
+  String get groupingDesc => '같은 사람이 같은 분에 보낸 메시지를 하나로 묶어요';
+
+  @override
+  String get sendingIndicatorTitle => '전송 중 표시 커스텀';
+
+  @override
+  String get sendingIndicatorDesc => '서버가 응답할 때까지 말풍선에 보여요';
+
+  @override
+  String get sending => '보내는 중…';
+
+  @override
+  String searchResultCount(int current, int total) {
+    return '$current/$total';
+  }
+
+  @override
+  String get searchShortcutsTitle => '단축키';
+
+  @override
+  String get close => '닫기';
+
+  @override
+  String get cancel => '취소';
+
+  @override
+  String get send => '전송';
+
+  @override
+  String get verticalPadding => '위아래 여백';
+
+  @override
+  String get backgroundTitle => '채팅 배경';
+
+  @override
+  String get lookCustom => '커스텀';
+
+  @override
+  String get lookLibrary => '기본';
+
+  @override
+  String get fontSize => '글자 크기';
+
+  @override
+  String get bubblePaddingH => '안쪽 여백 (좌우)';
+
+  @override
+  String get bubblePaddingV => '안쪽 여백 (위아래)';
+
+  @override
+  String get hide => '숨김';
+
+  @override
+  String get myProfileTitle => '내 프로필';
+
+  @override
+  String get myProfileDesc => '내 메시지 옆에도 프로필 표시';
+
+  @override
+  String get scrollThresholdTitle => '자동 스크롤 범위';
+
+  @override
+  String get menuPopup => '팝업';
+
+  @override
+  String get menuSheet => '바텀시트';
+
+  @override
+  String get longPressTitle => '길게 눌러 열기';
+
+  @override
+  String get longPressDesc => '끄면 우클릭으로만 열려요';
+
+  @override
+  String get hapticTitle => '햅틱 피드백';
+
+  @override
+  String get confirmDeleteTitle => '실패한 메시지 삭제 확인';
+
+  @override
+  String get confirmDeleteDesc => '전송 결과를 실패로 두고 삭제해 보세요';
+
+  @override
+  String get deleteFailedTitle => '이 메시지를 삭제할까요?';
+
+  @override
+  String get deleteFailedBody => '전송되지 않아 상대방은 보지 못했어요.';
+
+  @override
+  String get kind => '종류';
+
+  @override
+  String get designBackground => '배경색';
+
+  @override
+  String get designTextColor => '글자색';
+
+  @override
+  String get designRadius => '모서리';
+
+  @override
+  String get designHeight => '높이';
+
+  @override
+  String get designSize => '크기';
+
+  @override
+  String get designShape => '모양';
+
+  @override
+  String get roundness => '둥글기';
+
+  @override
+  String get roundFull => '완전 둥글게';
+
+  @override
+  String get weekdayTitle => '요일 표시';
+
+  @override
+  String get use24hTitle => '24시간제';
+
+  @override
+  String get searchShortcutsDesc => 'Ctrl/⌘ + F로 열기, Enter로 다음 결과, Esc로 닫기';
+
+  @override
+  String get sectionBehavior => '동작';
+
+  @override
+  String get partBubble => '말풍선';
+
+  @override
+  String get partBubbleDesc =>
+      'senderBubbleBuilder와 receiverBubbleBuilder는 메시지 내용을 child로 받아요. 원하는 컨테이너로 감싸기만 하면 됩니다.';
+
+  @override
+  String get partSearch => '검색창';
+
+  @override
+  String get partSearchDesc =>
+      '채팅 위 검색 버튼으로 열어 보세요. 툴킷의 ChatSearchBar를 꾸미거나, ChatSearchController의 search(), showOlder(), showNewer(), close()로 직접 만든 바를 연결할 수 있어요.';
+
+  @override
+  String get partInput => '입력창';
+
+  @override
+  String get partInputDesc =>
+      '채팅은 customInputField를 아래에 배치만 해요. 입력창과 전송(controller.dispatchMessage)은 직접 만듭니다.';
+
+  @override
+  String get partNotice => '새 메시지 알림';
+
+  @override
+  String get partNoticeDesc =>
+      '위로 스크롤한 상태에서 메시지가 오면 보여요. 위로 스크롤한 뒤 채팅 위의 받기 버튼을 눌러 보세요.';
+
+  @override
+  String get partSeparator => '날짜 구분선';
+
+  @override
+  String get partSeparatorDesc => '날짜가 바뀌는 곳에 보여요. 빌더는 그날의 timestamp를 받습니다.';
+
+  @override
+  String get partTime => '시간';
+
+  @override
+  String get partTimeDesc => '묶음의 마지막 말풍선 옆에 보여요. 빌더는 메시지 timestamp를 받습니다.';
+
+  @override
+  String get partProfile => '프로필';
+
+  @override
+  String get partProfileDesc => '메시지 묶음마다 한 번 보여요. 빌더는 보낸 사람 이름을 받습니다.';
+
+  @override
+  String get partRead => '읽음 표시';
+
+  @override
+  String get partReadDesc =>
+      'SenderMessage(isRead: false/true)에 보여요. 메시지를 보낸 뒤 모두 읽음을 눌러 보세요.';
+
+  @override
+  String get partMenu => '말풍선 메뉴';
+
+  @override
+  String get partMenuDesc =>
+      '말풍선을 길게 누르거나 우클릭하세요. 툴킷 팝업에 항목만 넣거나, 핸들러로 원하는 UI를 띄울 수 있어요.';
+
+  @override
+  String get partReadOnly => '읽기 전용 안내';
+
+  @override
+  String get partReadOnlyDesc =>
+      'Chat(readOnly: true)일 때 입력창 대신 readOnlyWidget이 보여요.';
+
+  @override
+  String get studioEdit => '편집';
+
+  @override
+  String get studioReset => '처음 상태로';
+
+  @override
+  String get tabStructure => '구성';
+
+  @override
+  String get tabStyle => '박스';
+
+  @override
+  String get tabCode => '코드';
+
+  @override
+  String get layoutAxis => '배치 방향';
+
+  @override
+  String get axisRow => '가로';
+
+  @override
+  String get axisColumn => '세로';
+
+  @override
+  String get layoutMain => '방향 정렬';
+
+  @override
+  String get layoutCross => '교차 정렬';
+
+  @override
+  String get layoutGap => '요소 간격';
+
+  @override
+  String get alignStart => '시작';
+
+  @override
+  String get alignCenter => '가운데';
+
+  @override
+  String get alignEnd => '끝';
+
+  @override
+  String get alignBetween => '양끝';
+
+  @override
+  String get elements => '요소';
+
+  @override
+  String get elementsHint => '⋮⋮를 끌어 순서를 바꾸고, 요소를 눌러 스타일을 바꾸세요';
+
+  @override
+  String get addElement => '추가';
+
+  @override
+  String get elementVisible => '보이기/숨기기';
+
+  @override
+  String get elContent => '메시지 내용';
+
+  @override
+  String get elText => '텍스트';
+
+  @override
+  String get elIcon => '아이콘';
+
+  @override
+  String get elField => '입력칸';
+
+  @override
+  String get elButton => '버튼';
+
+  @override
+  String get elBadge => '배지';
+
+  @override
+  String get elAvatar => '프로필 사진';
+
+  @override
+  String get elSpacer => '빈 공간';
+
+  @override
+  String get elDivider => '선';
+
+  @override
+  String get propSource => '표시 내용';
+
+  @override
+  String get propText => '문구';
+
+  @override
+  String get propTextUnread => '읽기 전 문구';
+
+  @override
+  String get propTextRead => '읽은 후 문구';
+
+  @override
+  String get propIconUnread => '읽기 전 아이콘';
+
+  @override
+  String get propIconRead => '읽은 후 아이콘';
+
+  @override
+  String get propHint => '힌트 문구';
+
+  @override
+  String get propAction => '동작';
+
+  @override
+  String get propBold => '굵게';
+
+  @override
+  String get propColor => '색';
+
+  @override
+  String get propExpand => '남은 공간 채우기';
+
+  @override
+  String get propWidth => '너비';
+
+  @override
+  String get propThickness => '두께';
+
+  @override
+  String get lookFilled => '채움';
+
+  @override
+  String get srcLiteral => '직접 입력';
+
+  @override
+  String get srcName => '이름';
+
+  @override
+  String get srcTime => '시간';
+
+  @override
+  String get srcDate => '날짜';
+
+  @override
+  String get srcCount => '결과 개수';
+
+  @override
+  String get srcRead => '읽음 상태';
+
+  @override
+  String get srcNotice => '알림 문구';
+
+  @override
+  String get srcReadOnly => '안내 문구';
+
+  @override
+  String get actNone => '없음';
+
+  @override
+  String get actAttach => '첨부';
+
+  @override
+  String get boxGradient => '그라데이션';
+
+  @override
+  String get boxGradientTo => '그라데이션 끝 색';
+
+  @override
+  String get boxBorder => '테두리 두께';
+
+  @override
+  String get boxBorderColor => '테두리 색';
+
+  @override
+  String get boxShadow => '그림자';
+
+  @override
+  String get boxMarginH => '바깥 여백 (좌우)';
+
+  @override
+  String get boxMarginV => '바깥 여백 (위아래)';
+
+  @override
+  String get boxAuto => '자동';
+
+  @override
+  String get boxFill => '가로로 꽉 채우기';
+
+  @override
+  String get boxAlign => '위치';
+
+  @override
+  String get colorHue => '색상';
+
+  @override
+  String get colorSaturation => '채도';
+
+  @override
+  String get colorBrightness => '밝기';
+
+  @override
+  String get colorOpacity => '불투명도';
+
+  @override
+  String get colorHexHint => 'RRGGBB 또는 AARRGGBB 입력 후 Enter';
+
+  @override
+  String get sectionParts => '컴포넌트 디자인';
+
+  @override
+  String get sectionPartsDesc =>
+      '커스텀을 고르면 채팅 옆에 편집 패널이 열려요. 요소를 추가·삭제·순서 변경하고, 요소와 박스의 스타일을 자유롭게 바꿀 수 있어요. 바꾸는 즉시 채팅에 반영됩니다.';
+
+  @override
+  String studioTitle(String part) {
+    return '$part 디자인';
+  }
+
+  @override
+  String get previewNotice => '미리보기: 위로 스크롤 후 메시지 받기';
+
+  @override
+  String get boxMinHeight => '최소 높이';
 }

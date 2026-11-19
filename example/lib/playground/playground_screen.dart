@@ -6,71 +6,30 @@ import 'package:material_ui/material_ui.dart';
 import '../l10n/app_localizations.dart';
 import '../rooms/fake_chat_server.dart';
 import '../site/site_theme.dart';
-
-/// How many messages the fake server holds for the preview room.
-enum PlaygroundHistory {
-  empty(0),
-  few(3),
-  page(60),
-  long(500);
-
-  const PlaygroundHistory(this.total);
-  final int total;
-}
-
-/// What the fake server answers when a message is sent.
-enum PlaygroundSendResult { success, fail, block }
-
-/// Every option the playground exposes. Changing [history], [latencyMs] or [images] reloads the
-/// room; the rest apply live. The chat always runs reversed (newest message at offset 0).
-class PlaygroundSettings {
-  bool messagesStartAtTop = true;
-  int appearMs = 250; // 0 = off
-  ChatAlignment senderAlignment = ChatAlignment.end;
-  double horizontalPadding = 24;
-  double bubbleMaxWidth = 420; // >= _unlimitedWidth means no limit
-  double bubbleRadius = 18;
-  Color senderColor = _palette.first;
-  bool customTime = true;
-  bool receiverProfile = true;
-  bool readIndicator = true;
-  bool newMessageNotification = true;
-  bool customDateSeparator = true;
-  bool bubbleMenu = true;
-  bool readOnly = false;
-
-  PlaygroundHistory history = PlaygroundHistory.page;
-  int latencyMs = 600;
-  bool images = false;
-  PlaygroundSendResult sendResult = PlaygroundSendResult.success;
-  bool autoReply = true;
-
-  bool get unlimitedWidth => bubbleMaxWidth >= _unlimitedWidth;
-}
-
-const double _unlimitedWidth = 640;
-
-const List<Color> _palette = [
-  SiteColors.blue,
-  Color(0xFF7C5CFA),
-  Color(0xFF15B886),
-  Color(0xFFFF8A3D),
-  Color(0xFFF04452),
-  SiteColors.grey900,
-];
+import 'playground_controls.dart';
+import 'playground_settings.dart';
+import 'studio_code.dart';
+import 'studio_editor.dart';
+import 'studio_render.dart';
 
 /// Try the chat with live settings: a large chat next to grouped settings cards (a toggle
 /// between them on narrow screens). Messages come from [FakeChatServer], so no backend is needed
 /// and the site can be served as static files.
 class PlaygroundPage extends StatefulWidget {
-  const PlaygroundPage({super.key});
+  const PlaygroundPage({super.key, this.settings, this.changes});
+
+  /// Settings to start from; for tests.
+  final PlaygroundSettings? settings;
+
+  /// Rebuilds the page when [settings] are changed from outside; for tests.
+  final Listenable? changes;
 
   @override
   State<PlaygroundPage> createState() => _PlaygroundPageState();
 }
 
 class _PlaygroundPageState extends State<PlaygroundPage> {
-  final _settings = PlaygroundSettings();
+  late final _settings = widget.settings ?? PlaygroundSettings();
   final _server = FakeChatServer.instance;
   final _textController = TextEditingController();
   final _inputFocusNode = FocusNode();
@@ -79,15 +38,28 @@ class _PlaygroundPageState extends State<PlaygroundPage> {
   late RoomInfo _room;
   String? _language;
   int _session = 0;
+  static int _roomCount = 0;
   bool _loadingInitial = true;
   bool _loadingOlder = false;
+  bool _loadingNewer = false;
   bool _hasNoMoreMessage = false;
+
+  ChatSearchController? _searchController;
+  ChatSearchController get _search => _searchController!;
   int _incomingCount = 0;
   bool _showSettings = false; // narrow layout only
 
   PlaygroundSettings get s => _settings;
   ChatController get _chatController => _controller!;
   AppLocalizations get l => AppLocalizations.of(context);
+
+  @override
+  void initState() {
+    super.initState();
+    widget.changes?.addListener(_onChanges);
+  }
+
+  void _onChanges() => setState(() {});
 
   @override
   void didChangeDependencies() {
@@ -102,8 +74,10 @@ class _PlaygroundPageState extends State<PlaygroundPage> {
 
   @override
   void dispose() {
+    widget.changes?.removeListener(_onChanges);
     _textController.dispose();
     _inputFocusNode.dispose();
+    _searchController?.dispose();
     _controller?.dispose();
     super.dispose();
   }
@@ -116,7 +90,8 @@ class _PlaygroundPageState extends State<PlaygroundPage> {
     final old = _controller;
     _session++;
     _room = RoomInfo(
-      id: 'pg$_session',
+      // Unique for the app run: the fake server keeps the messages posted in each room.
+      id: 'pg${++_roomCount}',
       title: 'playground',
       description: '',
       totalMessages: s.history.total,
@@ -125,9 +100,23 @@ class _PlaygroundPageState extends State<PlaygroundPage> {
     );
     _controller = ChatController(
       customSortCallback: (a, b) => a.timestamp.compareTo(b.timestamp),
+      // Never join an existing group: every message gets its own profile and time.
+      additionalGroupCondition: s.grouping ? null : (group, message) => false,
     );
     _loadingInitial = true;
     _loadingOlder = false;
+    _loadingNewer = false;
+    final oldSearch = _searchController;
+    final room = _room;
+    _searchController = ChatSearchController(
+      chatController: _controller!,
+      // The fake server finds indices; the search works with message ids.
+      onSearch: (query) async => [
+        for (final index in await _server.search(room, query)) _server.idAt(room, index),
+      ],
+      onLoadAround: _loadAround,
+    );
+    if (oldSearch != null) WidgetsBinding.instance.addPostFrameCallback((_) => oldSearch.dispose());
     _hasNoMoreMessage = s.history.total == 0;
     _loadInitialMessages(_session);
     if (old != null) WidgetsBinding.instance.addPostFrameCallback((_) => old.dispose());
@@ -151,7 +140,7 @@ class _PlaygroundPageState extends State<PlaygroundPage> {
     if (_hasNoMoreMessage || _loadingOlder || _loadingInitial) return;
     final groups = _chatController.messageGroups;
     if (groups.isEmpty) return;
-    final oldest = FakeChatServer.indexOf(groups.first.messages.first);
+    final oldest = _server.indexIn(_room, groups.first.messages.first);
     if (oldest == null) return;
     final session = _session;
     setState(() => _loadingOlder = true);
@@ -165,36 +154,100 @@ class _PlaygroundPageState extends State<PlaygroundPage> {
     }
   }
 
+  // Called at the newest loaded message while ChatController.hasNewerMessages is true, i.e. after
+  // jumping to a search result.
+  Future<void> _onScrollToBottom() async {
+    if (_loadingNewer || _loadingInitial || !_chatController.hasNewerMessages) return;
+    final groups = _chatController.messageGroups;
+    if (groups.isEmpty) return;
+    final newest = _server.indexIn(_room, groups.last.messages.last);
+    if (newest == null) return;
+    final session = _session;
+    setState(() => _loadingNewer = true);
+    try {
+      final page = await _server.fetchNewer(_room, afterIndex: newest);
+      if (!mounted || session != _session) return;
+      _chatController.addNewerMessages(page.messages, hasMore: page.hasMore);
+    } finally {
+      if (mounted && session == _session) setState(() => _loadingNewer = false);
+    }
+  }
+
+  /// Reloads the latest messages after looking at an earlier part of the conversation.
+  Future<void> _goToLatest() async {
+    final session = _session;
+    final messages = await _server.fetchMessages(_room);
+    if (!mounted || session != _session) return;
+    _chatController.setMessages(messages);
+    _hasNoMoreMessage = messages.length < FakeChatServer.pageSize;
+    setState(() {});
+  }
+
+  // ---------------------------------------------------------------------------
+  // Search
+
+  /// Loads the messages around a search result that is not loaded.
+  Future<void> _loadAround(String messageId) async {
+    final session = _session;
+    final index = _server.indexOfId(_room, messageId);
+    if (index == null) return;
+    final page = await _server.fetchAround(_room, index);
+    if (!mounted || session != _session) return;
+    _hasNoMoreMessage = !page.hasOlder;
+    // The search term is marked in the text (SearchHighlightedText), so the message itself is
+    // not highlighted.
+    await _chatController.setMessagesAround(
+      page.messages,
+      anchorMessageId: messageId,
+      hasNewerMessages: page.hasNewer,
+      highlight: false,
+    );
+  }
+
   // ---------------------------------------------------------------------------
   // Sending / receiving
 
-  void _receive([String? text]) {
+  Future<void> _receive([String? text]) async {
+    // A message from the server belongs after the newest one, so return to the present first.
+    if (_chatController.hasNewerMessages) await _goToLatest();
+    if (!mounted) return;
     _incomingCount++;
+    final room = _room;
+    final id = 'in_${DateTime.now().microsecondsSinceEpoch}';
     _chatController.dispatchMessage(
       ReceiverMessage(
-        id: 'in_${DateTime.now().microsecondsSinceEpoch}',
+        id: id,
         name: _server.otherName,
         timestamp: DateTime.now().toIso8601String(),
         elements: [DemoTextElement(text ?? l.incomingMessage(_incomingCount))],
       ),
-      onDispatch: (m) async => m,
+      onDispatch: (m) async {
+        _server.post(room, m);
+        return m;
+      },
     );
   }
 
-  void _send() {
+  Future<void> _send() async {
     _inputFocusNode.requestFocus();
     final text = _textController.text.trim();
     if (text.isEmpty) return;
     _textController.clear();
+    // A sent message belongs after the newest one, so return to the present first.
+    if (_chatController.hasNewerMessages) await _goToLatest();
+    if (!mounted) return;
+    final room = _room;
 
     final controller = _chatController;
     final reply = l.autoReply(text);
+    final id = 'out_${DateTime.now().microsecondsSinceEpoch}';
     controller.dispatchMessage(
       SenderMessage(
+        id: id,
         name: _server.myName,
         timestamp: DateTime.now().toIso8601String(),
         elements: [DemoTextElement(text)],
-        isRead: s.readIndicator ? false : null,
+        isRead: false,
       ),
       onDispatch: (message) async {
         await Future<void>.delayed(Duration(milliseconds: s.latencyMs));
@@ -212,212 +265,440 @@ class _PlaygroundPageState extends State<PlaygroundPage> {
                 }
               });
             }
-            return message.copyWith(isLoading: false);
+            final sent = message.copyWith(isLoading: false);
+            _server.post(room, sent);
+            return sent;
         }
       },
     );
   }
 
+  Future<bool> _confirmDelete(Message message) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(l.deleteFailedTitle),
+        content: Text(l.deleteFailedBody),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: Text(l.cancel)),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: Text(l.menuDelete, style: const TextStyle(color: SiteColors.red)),
+          ),
+        ],
+      ),
+    );
+    return confirmed ?? false;
+  }
+
   // ---------------------------------------------------------------------------
   // Configuration built from the settings
 
+  bool _custom(Part part) => s.look(part) == Look.custom;
+
+  /// The text of a studio text or badge element.
+  String _textOf(
+    StudioElement e, {
+    String name = '',
+    String timestamp = '',
+    bool isRead = false,
+    ChatSearchController? search,
+  }) {
+    final locale = Localizations.localeOf(context).toLanguageTag();
+    DateTime date() => DateTime.parse(timestamp);
+    return switch (e.source) {
+      TextSource.literal => e.text,
+      TextSource.name => name,
+      TextSource.time => timestamp.isEmpty
+          ? ''
+          : (e.use24h ? DateFormat.Hm(locale) : DateFormat.jm(locale)).format(date()),
+      TextSource.date => timestamp.isEmpty
+          ? ''
+          : (e.weekday ? DateFormat.MMMEd(locale) : DateFormat.yMd(locale)).format(date()),
+      TextSource.resultCount => search == null || !search.hasSearched
+          ? ''
+          : search.results.isEmpty
+              ? l.searchNoResults
+              : l.searchResultCount(search.index + 1, search.results.length),
+      TextSource.readState => isRead ? e.text2 : e.text,
+      TextSource.noticeLabel => l.newMessageFrom(name),
+      TextSource.readOnlyLabel => l.readOnlyNotice,
+    };
+  }
+
+  String _actionLabel(ButtonAction a) => switch (a) {
+        ButtonAction.send => l.send,
+        ButtonAction.attach => l.actAttach,
+        ButtonAction.older => l.searchOlder,
+        ButtonAction.newer => l.searchNewer,
+        ButtonAction.close => l.closeSearch,
+        ButtonAction.none => '',
+      };
+
+  Widget _render(Part part, {StudioSpec? spec, String name = '', String timestamp = '',
+          bool isRead = false, Widget? content, VoidCallback? onTap, bool aligned = true}) =>
+      renderStudio(
+        spec ?? s.spec(part),
+        StudioBinding(
+          text: (e) => _textOf(e, name: name, timestamp: timestamp, isRead: isRead),
+          content: content,
+          isRead: isRead,
+          actionLabel: _actionLabel,
+          onTap: onTap,
+        ),
+        aligned: aligned,
+      );
+
+  /// Builder of a part that is custom, hidden or the toolkit's (`null`).
+  T? _builder<T>(Part part, T custom, T hidden) => switch (s.look(part)) {
+        Look.custom => custom,
+        Look.hidden => hidden,
+        Look.library => null,
+      };
+
   ChatConfiguration _configuration(BuildContext context) {
-    final localeName = Localizations.localeOf(context).toLanguageTag();
     return ChatConfiguration(
       senderAlignment: s.senderAlignment,
-      padding: EdgeInsets.symmetric(horizontal: s.horizontalPadding),
+      padding: EdgeInsets.symmetric(horizontal: s.horizontalPadding, vertical: s.verticalPadding),
       messagesStartAtTop: s.messagesStartAtTop,
       messageAppearAnimationDuration:
           s.appearMs == 0 ? null : Duration(milliseconds: s.appearMs),
-      newReceiveMessageNotificationBuilder: s.newMessageNotification
-          ? (context, message, controller) => Padding(
-                padding: const EdgeInsets.only(bottom: 12),
-                child: Material(
-                  color: SiteColors.grey900,
-                  borderRadius: BorderRadius.circular(999),
-                  child: InkWell(
-                    borderRadius: BorderRadius.circular(999),
-                    onTap: controller.scrollToBottom,
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                      child: Row(mainAxisSize: MainAxisSize.min, children: [
-                        const Icon(Icons.arrow_downward_rounded, size: 16, color: Colors.white),
-                        const SizedBox(width: 6),
-                        Text(l.newMessageFrom(message.name),
-                            style: const TextStyle(color: Colors.white, fontSize: 13)),
-                      ]),
-                    ),
-                  ),
-                ),
-              )
+      newMessageScrollThreshold: s.scrollThreshold,
+      searchShortcuts: s.searchShortcuts ? defaultChatSearchShortcuts : const {},
+      searchBarBuilder: (context, search) => _custom(Part.search)
+          ? _StudioSearchBar(
+              search: search,
+              spec: s.spec(Part.search),
+              textOf: _textOf,
+              actionLabel: _actionLabel,
+              hint: l.searchHint,
+            )
+          : ChatSearchBar(
+              controller: search,
+              hintText: l.searchHint,
+              noResultsText: l.searchNoResults,
+              olderTooltip: l.searchOlder,
+              newerTooltip: l.searchNewer,
+              closeTooltip: l.closeSearch,
+              resultCountBuilder: l.searchResultCount,
+              style: s.textStyle(Part.search),
+            ),
+      newReceiveMessageNotificationBuilder: _custom(Part.notice)
+          ? (context, message, controller) => _render(Part.notice,
+              name: message.name, timestamp: message.timestamp, onTap: controller.scrollToBottom)
           : null,
-      dateSeparatorBuilder: s.customDateSeparator
-          ? (context, timestamp) => Padding(
-                padding: const EdgeInsets.symmetric(vertical: 14),
-                child: Center(
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: SiteColors.grey100,
-                      borderRadius: BorderRadius.circular(999),
-                    ),
-                    child: Text(DateFormat.MMMEd(localeName).format(DateTime.parse(timestamp)),
-                        style: const TextStyle(fontSize: 12, color: SiteColors.grey600)),
-                  ),
-                ),
-              )
-          : null,
-      readOnlyWidget: Container(
-        padding: const EdgeInsets.all(18),
-        alignment: Alignment.center,
-        color: SiteColors.grey50,
-        child: Text(l.readOnlyNotice,
-            style: const TextStyle(color: SiteColors.grey500, fontSize: 14)),
+      dateSeparatorBuilder: _builder<Widget Function(BuildContext, String)>(
+        Part.separator,
+        (context, timestamp) => _render(Part.separator, timestamp: timestamp),
+        (context, timestamp) => const SizedBox.shrink(),
       ),
+      dateSeparatorStyle: s.look(Part.separator) == Look.library
+          ? s.textStyle(Part.separator)
+          : null,
+      readOnlyWidget: _custom(Part.readOnly) ? _render(Part.readOnly) : null,
       bubbleConfiguration: BubbleConfiguration(
-        maxWidth: s.unlimitedWidth ? double.infinity : s.bubbleMaxWidth,
-        senderBubbleBuilder: (context, child) => _bubble(child, s.senderColor, Colors.white),
-        receiverBubbleBuilder: (context, child) =>
-            _bubble(child, SiteColors.grey100, SiteColors.grey900),
-        // My own messages need no avatar.
-        senderProfileBuilder: (context, name) => const SizedBox.shrink(),
-        timeBuilder: s.customTime
-            ? (context, timestamp) => Text(
-                  DateFormat.jm(localeName).format(DateTime.parse(timestamp)),
-                  style: const TextStyle(fontSize: 11, color: SiteColors.grey500),
-                )
+        maxWidth: s.unlimited ? double.infinity : s.maxWidth,
+        senderBubbleBuilder: _custom(Part.bubble)
+            ? (context, child) => _render(Part.bubble, content: child, aligned: false)
             : null,
-        receiverProfileBuilder: s.receiverProfile
-            ? (context, name) => Padding(
-                  padding: const EdgeInsets.only(bottom: 6),
-                  child: Column(mainAxisSize: MainAxisSize.min, children: [
-                    _Avatar(name: name, size: 28),
-                    const SizedBox(height: 4),
-                    Text(name,
-                        style: const TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600,
-                            color: SiteColors.grey700)),
-                  ]),
-                )
+        receiverBubbleBuilder: _custom(Part.bubble)
+            ? (context, child) =>
+                _render(Part.bubble, spec: s.receiverBubble, content: child, aligned: false)
             : null,
-        readIndicatorBuilder: s.readIndicator
-            ? (context, isRead) => isRead
-                ? const SizedBox.shrink()
-                : const Text('1',
-                    style: TextStyle(
-                        fontSize: 11, color: SiteColors.blue, fontWeight: FontWeight.w700))
+        loadingWidget: s.customSendingIndicator ? _sendingIndicator() : const BubbleConfiguration().loadingWidget,
+        senderProfileBuilder: s.myProfile
+            ? _builder<Widget Function(BuildContext, String)>(
+                Part.profile,
+                (context, name) => _render(Part.profile, name: name, aligned: false),
+                (context, name) => const SizedBox.shrink(),
+              )
+            : (context, name) => const SizedBox.shrink(),
+        profileNameStyle:
+            s.look(Part.profile) == Look.library ? s.textStyle(Part.profile) : null,
+        timeStyle: s.look(Part.time) == Look.library ? s.textStyle(Part.time) : null,
+        receiverProfileBuilder: _builder<Widget Function(BuildContext, String)>(
+          Part.profile,
+          (context, name) => _render(Part.profile, name: name, aligned: false),
+          (context, name) => const SizedBox.shrink(),
+        ),
+        timeBuilder: _builder<Widget Function(BuildContext, String)>(
+          Part.time,
+          (context, timestamp) => _render(Part.time, timestamp: timestamp, aligned: false),
+          (context, timestamp) => const SizedBox.shrink(),
+        ),
+        readIndicatorBuilder: _custom(Part.read)
+            ? (context, isRead) => _render(Part.read, isRead: isRead, aligned: false)
             : null,
-        menuConfiguration: s.bubbleMenu
-            ? BubbleMenuConfiguration(
+        menuConfiguration: s.menu == MenuKind.off
+            ? null
+            : BubbleMenuConfiguration(
+                enableLongPress: s.longPress,
+                enableHapticFeedback: s.haptic,
                 color: Colors.white,
+                surfaceTintColor: Colors.transparent,
                 elevation: 3,
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                senderItemsBuilder: (context, request) => [
-                  if (request.message.isFailed)
-                    _menuItem(l.menuRetry, Icons.refresh_rounded,
-                        (_, r) => _chatController.retryMessage(r.message)),
-                  _menuItem(l.menuDelete, Icons.delete_outline_rounded,
-                      (_, r) => _chatController.removeMessageEverywhere(r.message),
-                      danger: true),
-                ],
-                receiverItemsBuilder: (context, request) => [
-                  _menuItem(l.menuCopy, Icons.copy_rounded, (ctx, r) {
-                    Clipboard.setData(ClipboardData(
-                        text: r.message.elements
-                            .whereType<DemoTextElement>()
-                            .map((e) => e.text)
-                            .join('\n')));
-                  }),
-                ],
-              )
-            : null,
+                senderItemsBuilder: (context, request) =>
+                    [for (final a in _menuActions(request)) _menuItem(a)],
+                receiverItemsBuilder: (context, request) =>
+                    [for (final a in _menuActions(request)) _menuItem(a)],
+                senderMenuHandler: s.menu == MenuKind.sheet ? _showMenuSheet : null,
+                receiverMenuHandler: s.menu == MenuKind.sheet ? _showMenuSheet : null,
+              ),
       ),
     );
   }
 
-  BubbleMenuItem _menuItem(String label, IconData icon, BubbleMenuItemCallback onSelected,
-          {bool danger = false}) =>
-      BubbleMenuItem(
-        label: label,
-        icon: Icon(icon, size: 18, color: danger ? SiteColors.red : SiteColors.grey600),
-        height: 40,
-        textStyle:
-            TextStyle(fontSize: 14, color: danger ? SiteColors.red : SiteColors.grey900),
-        onSelected: onSelected,
-      );
+  Widget _sendingIndicator() {
+    final content = s.spec(Part.bubble).elements.where((e) => e.kind == ElementKind.content);
+    final color = _custom(Part.bubble) && content.isNotEmpty
+        ? content.first.color
+        : SiteColors.grey700;
+    return Row(mainAxisSize: MainAxisSize.min, children: [
+      SizedBox(
+        width: 12,
+        height: 12,
+        child: CircularProgressIndicator(strokeWidth: 1.6, color: color),
+      ),
+      const SizedBox(width: 8),
+      Text(l.sending, style: TextStyle(fontSize: 13, color: color)),
+    ]);
+  }
 
-  Widget _bubble(Widget child, Color color, Color textColor) => Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-        decoration: BoxDecoration(
-          color: color,
-          borderRadius: BorderRadius.circular(s.bubbleRadius),
-        ),
-        child: DefaultTextStyle.merge(
-          style: TextStyle(color: textColor, fontSize: 15, height: 1.45),
-          child: child,
-        ),
-      );
+  /// What the bubble menu offers for a message, shared by the popup and the sheet.
+  List<_MenuAction> _menuActions(BubbleMenuRequest request) => [
+        if (request.message.isFailed)
+          _MenuAction(l.menuRetry, Icons.refresh_rounded,
+              (_, r) => _chatController.retryMessage(r.message)),
+        _MenuAction(l.menuCopy, Icons.copy_rounded, (ctx, r) {
+          Clipboard.setData(ClipboardData(
+              text: r.message.elements.whereType<DemoTextElement>().map((e) => e.text).join('\n')));
+        }),
+        if (request.isSender)
+          _MenuAction(l.menuDelete, Icons.delete_outline_rounded,
+              (_, r) => _chatController.removeMessageEverywhere(r.message),
+              danger: true),
+      ];
+
+  BubbleMenuItem _menuItem(_MenuAction a) {
+    final color = a.danger ? SiteColors.red : SiteColors.grey900;
+    return BubbleMenuItem(
+      label: a.label,
+      icon: Icon(a.icon, size: 18, color: a.danger ? SiteColors.red : SiteColors.grey600),
+      height: 40,
+      textStyle: TextStyle(fontSize: 14, color: color),
+      onSelected: a.onSelected,
+    );
+  }
+
+  /// [BubbleMenuConfiguration.senderMenuHandler]: the same actions in a bottom sheet.
+  Future<void> _showMenuSheet(BuildContext bubbleContext, BubbleMenuRequest request) async {
+    final actions = _menuActions(request);
+    final chosen = await showModalBottomSheet<_MenuAction>(
+      context: bubbleContext,
+      backgroundColor: Colors.white,
+      showDragHandle: true,
+      constraints: const BoxConstraints(maxWidth: 480),
+      builder: (context) => SafeArea(
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          for (final a in actions)
+            ListTile(
+              leading: Icon(a.icon, color: a.danger ? SiteColors.red : SiteColors.grey600),
+              title: Text(a.label,
+                  style: TextStyle(color: a.danger ? SiteColors.red : SiteColors.grey900)),
+              onTap: () => Navigator.pop(context, a),
+            ),
+          const SizedBox(height: 8),
+        ]),
+      ),
+    );
+    if (chosen != null && bubbleContext.mounted) chosen.onSelected(bubbleContext, request);
+  }
 
   // ---------------------------------------------------------------------------
-  // Layout
+  // Layout: settings | chat (narrow screens switch); the studio opens beside the chat.
+
+  /// The part being designed in the studio, if any.
+  Part? _editing;
+
+  void _edit(Part? part) => setState(() {
+        _editing = part;
+        _showPart(part);
+      });
+
+  /// Makes [part] show in the chat while it is designed.
+  void _showPart(Part? part) {
+    switch (part) {
+      case Part.search:
+        if (!_search.isOpen) _search.open();
+      case Part.readOnly:
+        s.readOnly = true;
+      default:
+    }
+  }
+
+  /// The new message notice shows when a message arrives while scrolled up: scroll up, then
+  /// receive one.
+  Future<void> _previewNotice() async {
+    final c = _chatController;
+    if (!c.hasClients) return;
+    final target = (s.scrollThreshold + 400).clamp(0.0, c.position.maxScrollExtent);
+    await c.animateTo(target,
+        duration: const Duration(milliseconds: 300), curve: Curves.easeOutCubic);
+    if (mounted) await _receive();
+  }
 
   @override
   Widget build(BuildContext context) {
     return LayoutBuilder(builder: (context, constraints) {
-      if (constraints.maxWidth >= 1024) return _wide();
-      return _narrow();
+      final width = constraints.maxWidth;
+      if (width >= 1360) return _desktop();
+      if (width >= 1024) return _laptop();
+      return _mobile();
     });
   }
 
-  Widget _wide() => Center(
+  /// Studio | chat | settings.
+  Widget _desktop() => Center(
         child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 1440),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(28, 28, 12, 28),
-                  child: _chatCard(compact: false),
-                ),
+          constraints: const BoxConstraints(maxWidth: 1760),
+          child: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            AnimatedSize(
+              duration: const Duration(milliseconds: 220),
+              curve: Curves.easeOutCubic,
+              child: _editing == null
+                  ? const SizedBox(width: 12)
+                  : SizedBox(
+                      width: 400,
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(24, 28, 4, 28),
+                        child: _studio(),
+                      ),
+                    ),
+            ),
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 28, 12, 28),
+                child: _chatCard(compact: false),
               ),
-              SizedBox(width: 460, child: _settingsList(withIntro: true)),
-            ],
-          ),
+            ),
+            SizedBox(width: 420, child: _settingsList(withIntro: true)),
+          ]),
         ),
       );
 
-  Widget _narrow() => Column(children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-          child: SegmentedChoice<bool>(
-            value: _showSettings,
-            options: {false: l.preview, true: l.settings},
-            onChanged: (v) => setState(() => _showSettings = v),
+  /// Chat | settings, with the studio in place of the settings while open.
+  Widget _laptop() => Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        Expanded(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(24, 24, 12, 24),
+            child: _chatCard(compact: false),
           ),
         ),
-        Expanded(
-          // IndexedStack keeps the chat alive while the settings are shown.
-          child: IndexedStack(index: _showSettings ? 1 : 0, children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-              child: _chatCard(compact: true),
-            ),
-            _settingsList(withIntro: false),
-          ]),
+        SizedBox(
+          width: 420,
+          child: _editing == null
+              ? _settingsList(withIntro: true)
+              : Padding(
+                  padding: const EdgeInsets.fromLTRB(4, 24, 24, 24),
+                  child: _studio(closeIcon: Icons.arrow_back_rounded),
+                ),
         ),
       ]);
 
-  Widget _chatCard({required bool compact}) => Container(
+  /// Preview or settings; while designing, the chat on top and the studio below.
+  Widget _mobile() {
+    if (_editing != null) {
+      return Column(children: [
+        Expanded(
+          flex: 5,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(12, 12, 12, 6),
+            child: _chatCard(compact: true),
+          ),
+        ),
+        Expanded(
+          flex: 6,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(12, 6, 12, 12),
+            child: _studio(closeIcon: Icons.arrow_back_rounded),
+          ),
+        ),
+      ]);
+    }
+    return Column(children: [
+      Padding(
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+        child: SegmentedChoice<bool>(
+          value: _showSettings,
+          options: {false: l.preview, true: l.settings},
+          // The page background is grey100 too, so the track needs to be darker.
+          trackColor: SiteColors.grey200,
+          onChanged: (v) => setState(() => _showSettings = v),
+        ),
+      ),
+      Expanded(
+        // IndexedStack keeps the chat alive while the settings are shown.
+        child: IndexedStack(index: _showSettings ? 1 : 0, children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+            child: _chatCard(compact: true),
+          ),
+          _settingsList(withIntro: false),
+        ]),
+      ),
+    ]);
+  }
+
+  Widget _studio({IconData closeIcon = Icons.close_rounded}) {
+    final part = _editing!;
+    final (title, description) = _partText(part);
+    return StudioEditor(
+      key: const Key('studio'),
+      part: part,
+      title: title,
+      description: description,
+      variants: part == Part.bubble
+          ? [(l.bubbleColor, s.spec(Part.bubble)), (l.receiverBubbleColor, s.receiverBubble)]
+          : [(title, s.spec(part))],
+      code: () => studioCode(part, s.spec(part), receiver: s.receiverBubble),
+      onChanged: () => setState(() {}),
+      onReset: () => setState(() => s.reset(part)),
+      onClose: () => _edit(null),
+      closeIcon: closeIcon,
+      previewLabel: part == Part.notice ? l.previewNotice : null,
+      onPreview: part == Part.notice ? _previewNotice : null,
+    );
+  }
+
+  (String, String) _partText(Part part) => switch (part) {
+        Part.bubble => (l.partBubble, l.partBubbleDesc),
+        Part.search => (l.partSearch, l.partSearchDesc),
+        Part.input => (l.partInput, l.partInputDesc),
+        Part.notice => (l.partNotice, l.partNoticeDesc),
+        Part.separator => (l.partSeparator, l.partSeparatorDesc),
+        Part.time => (l.partTime, l.partTimeDesc),
+        Part.profile => (l.partProfile, l.partProfileDesc),
+        Part.read => (l.partRead, l.partReadDesc),
+        Part.readOnly => (l.partReadOnly, l.partReadOnlyDesc),
+      };
+
+  Widget _chatCard({required bool compact}) => AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
         clipBehavior: Clip.antiAlias,
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: s.background,
           borderRadius: BorderRadius.circular(24),
           boxShadow: SiteShadows.card,
         ),
         child: Column(children: [
-          _chatHeader(compact),
+          // Icon-only actions when the card is narrow (e.g. with the studio open).
+          LayoutBuilder(
+            builder: (context, c) => ColoredBox(
+              color: Colors.white,
+              child: _chatHeader(compact || c.maxWidth < 820),
+            ),
+          ),
           const Divider(height: 1, color: SiteColors.grey100),
           Expanded(child: _chat()),
         ]),
@@ -437,6 +718,7 @@ class _PlaygroundPageState extends State<PlaygroundPage> {
         Expanded(
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Text(_server.otherName,
+                overflow: TextOverflow.ellipsis,
                 style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
             Row(children: [
               Container(
@@ -446,12 +728,15 @@ class _PlaygroundPageState extends State<PlaygroundPage> {
                     color: Color(0xFF15B886), shape: BoxShape.circle),
               ),
               const SizedBox(width: 5),
-              Text(l.online,
-                  style: const TextStyle(fontSize: 12, color: SiteColors.grey500)),
+              Flexible(
+                child: Text(l.online,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 12, color: SiteColors.grey500)),
+              ),
             ]),
           ]),
         ),
-        if (_loadingInitial || _loadingOlder)
+        if (_loadingInitial || _loadingOlder || _loadingNewer)
           const Padding(
             padding: EdgeInsets.only(right: 12),
             child: SizedBox(
@@ -460,11 +745,24 @@ class _PlaygroundPageState extends State<PlaygroundPage> {
               child: CircularProgressIndicator(strokeWidth: 2, color: SiteColors.blue),
             ),
           ),
+        ListenableBuilder(
+          listenable: _search,
+          builder: (context, _) => IconButton(
+            tooltip: l.search,
+            onPressed: () => _search.isOpen ? _search.close() : _search.open(),
+            isSelected: _search.isOpen,
+            visualDensity: compact ? VisualDensity.compact : null,
+            icon: const Icon(Icons.search_rounded, size: 20),
+            color: SiteColors.grey600,
+            selectedIcon: const Icon(Icons.search_rounded, size: 20, color: SiteColors.blue),
+          ),
+        ),
         for (final (label, icon, onTap, primary) in actions)
           Padding(
-            padding: const EdgeInsets.only(left: 6),
+            padding: EdgeInsets.only(left: compact ? 0 : 6),
             child: compact
                 ? IconButton(
+                    visualDensity: VisualDensity.compact,
                     tooltip: label,
                     onPressed: onTap,
                     icon: Icon(icon, size: 20),
@@ -482,6 +780,48 @@ class _PlaygroundPageState extends State<PlaygroundPage> {
         child: CircularProgressIndicator(strokeWidth: 2.5, color: SiteColors.blue),
       );
     }
+    return Stack(children: [
+      _chatView(),
+      // Shown while an earlier part of the conversation is open (after a search result).
+      Positioned(
+        right: 16,
+        bottom: s.readOnly ? 80 : 84,
+        child: ListenableBuilder(
+          listenable: _chatController,
+          builder: (context, _) => AnimatedSwitcher(
+            duration: const Duration(milliseconds: 200),
+            child: _chatController.hasNewerMessages
+                ? Material(
+                    key: const ValueKey('jump-to-latest'),
+                    color: Colors.white,
+                    elevation: 3,
+                    shape: const StadiumBorder(),
+                    child: InkWell(
+                      customBorder: const StadiumBorder(),
+                      onTap: _goToLatest,
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+                        child: Row(mainAxisSize: MainAxisSize.min, children: [
+                          const Icon(Icons.keyboard_double_arrow_down_rounded,
+                              size: 18, color: SiteColors.blue),
+                          const SizedBox(width: 6),
+                          Text(l.jumpToLatest,
+                              style: const TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600,
+                                  color: SiteColors.grey900)),
+                        ]),
+                      ),
+                    ),
+                  )
+                : const SizedBox.shrink(),
+          ),
+        ),
+      ),
+    ]);
+  }
+
+  Widget _chatView() {
     return Chat(
       // A new controller needs a new Chat.
       key: ObjectKey(_chatController),
@@ -489,48 +829,26 @@ class _PlaygroundPageState extends State<PlaygroundPage> {
       readOnly: s.readOnly,
       configuration: _configuration(context),
       onScrollToTop: _onScrollToTop,
+      onScrollToBottom: _onScrollToBottom,
+      searchController: _search,
+      onDeleteFailedMessage: s.confirmDeleteFailed ? _confirmDelete : null,
       customInputField: (context, controller) => SafeArea(
         top: false,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-          child: Row(children: [
-            Expanded(
-              child: TextField(
-                controller: _textController,
-                focusNode: _inputFocusNode,
-                textInputAction: TextInputAction.send,
-                // Set, so Enter does not unfocus the field.
-                onEditingComplete: _send,
-                style: const TextStyle(fontSize: 15),
-                decoration: InputDecoration(
-                  isDense: true,
-                  hintText: l.inputHint,
-                  hintStyle: const TextStyle(color: SiteColors.grey400),
-                  filled: true,
-                  fillColor: SiteColors.grey100,
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(999),
-                    borderSide: BorderSide.none,
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(width: 8),
-            Material(
-              color: SiteColors.blue,
-              shape: const CircleBorder(),
-              child: InkWell(
-                customBorder: const CircleBorder(),
-                onTap: _send,
-                child: const SizedBox(
-                  width: 46,
-                  height: 46,
-                  child: Icon(Icons.arrow_upward_rounded, color: Colors.white, size: 22),
-                ),
-              ),
-            ),
-          ]),
+        child: renderStudio(
+          s.spec(Part.input),
+          StudioBinding(
+            text: (e) => _textOf(e),
+            field: _textController,
+            focus: _inputFocusNode,
+            onSubmitted: (_) => _send(),
+            hint: l.inputHint,
+            actions: {
+              ButtonAction.send: _send,
+              ButtonAction.attach: () {},
+              ButtonAction.none: () {},
+            },
+            actionLabel: _actionLabel,
+          ),
         ),
       ),
     );
@@ -548,6 +866,126 @@ class _PlaygroundPageState extends State<PlaygroundPage> {
     }
   }
 
+  Widget _switch(String title, bool value, ValueChanged<bool> onChanged,
+          {String? api, String? description}) =>
+      SwitchRow(
+        title: title,
+        api: api,
+        description: description,
+        value: value,
+        onChanged: (v) => _set(() => onChanged(v)),
+      );
+
+  Widget _choice<T>(String title, T value, Map<T, String> options, ValueChanged<T> onChanged,
+          {String? api}) =>
+      FieldRow(
+        title: title,
+        api: api,
+        child: SegmentedChoice<T>(
+          value: value,
+          options: options,
+          onChanged: (v) => _set(() => onChanged(v)),
+        ),
+      );
+
+  /// The looks a part can take.
+  Map<Look, String> _looksOf(Part part) => {
+        if (part != Part.input && part != Part.notice && part != Part.read)
+          Look.library: l.lookLibrary,
+        if (part == Part.notice || part == Part.read) Look.hidden: l.off,
+        Look.custom: l.lookCustom,
+        if (const [Part.separator, Part.time, Part.profile].contains(part))
+          Look.hidden: l.hide,
+      };
+
+  /// The card of a part: its look, and an edit button that opens the studio.
+  Widget _partCard(Part part, {required String api, List<Widget> extra = const []}) {
+    final (title, _) = _partText(part);
+    final looks = _looksOf(part);
+    final editing = _editing == part;
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.fromLTRB(16, 12, 12, 12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: editing ? SiteColors.blue : SiteColors.grey100,
+            width: editing ? 1.5 : 1),
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        Row(children: [
+          Expanded(child: SettingLabel(title: title, api: api)),
+          if (s.look(part) == Look.custom)
+            TextButton.icon(
+              key: ValueKey('edit-${part.name}'),
+              style: TextButton.styleFrom(
+                foregroundColor: editing ? Colors.white : SiteColors.blue,
+                backgroundColor: editing ? SiteColors.blue : SiteColors.blueWeak,
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                visualDensity: VisualDensity.compact,
+              ),
+              onPressed: () => _edit(editing ? null : part),
+              icon: const Icon(Icons.tune_rounded, size: 16),
+              label: Text(l.studioEdit),
+            ),
+        ]),
+        if (looks.length > 1) ...[
+          const SizedBox(height: 10),
+          SegmentedChoice<Look>(
+            key: ValueKey('look-${part.name}'),
+            value: s.look(part),
+            options: looks,
+            onChanged: (v) => setState(() {
+              s.looks[part] = v;
+              // Choosing custom opens the studio; leaving it closes the studio.
+              if (v == Look.custom) {
+                _editing = part;
+                _showPart(part);
+              } else if (_editing == part) {
+                _editing = null;
+              }
+            }),
+          ),
+        ],
+        if (s.look(part) == Look.library &&
+            const [Part.search, Part.separator, Part.time, Part.profile].contains(part))
+          ..._libraryText(part),
+        ...extra,
+      ]),
+    );
+  }
+
+  /// Text colour and size of a part the toolkit draws, through its style parameter.
+  List<Widget> _libraryText(Part part) {
+    final api = switch (part) {
+      Part.search => 'ChatSearchBar.style',
+      Part.separator => 'dateSeparatorStyle',
+      Part.time => 'timeStyle',
+      _ => 'profileNameStyle',
+    };
+    final size = s.textSizes[part];
+    return [
+      const SizedBox(height: 4),
+      ColorField(
+        key: ValueKey('text-color-${part.name}'),
+        title: l.designTextColor,
+        color: s.textColors[part] ?? SiteColors.grey900,
+        onChanged: (c) => _set(() => s.textColors[part] = c),
+      ),
+      SliderRow(
+        key: ValueKey('text-size-${part.name}'),
+        title: l.fontSize,
+        api: api,
+        valueLabel: size == null ? l.lookLibrary : '${size.round()}px',
+        value: size ?? 14,
+        min: 9,
+        max: 24,
+        divisions: 15,
+        onChanged: (v) => _set(() => s.textSizes[part] = v.roundToDouble()),
+      ),
+    ];
+  }
+
   Widget _settingsList({required bool withIntro}) {
     return ListView(
       key: const Key('playground-settings'),
@@ -561,8 +999,117 @@ class _PlaygroundPageState extends State<PlaygroundPage> {
               style: const TextStyle(fontSize: 15, color: SiteColors.grey600, height: 1.6)),
           const SizedBox(height: 24),
         ],
-        _group(l.sectionServer, [
-          _FieldRow(
+        SettingsGroup(
+          title: l.sectionParts,
+          description: l.sectionPartsDesc,
+          children: [
+            const SizedBox(height: 8),
+            _partCard(Part.bubble, api: 'senderBubbleBuilder'),
+            _partCard(Part.search, api: 'searchBarBuilder', extra: [
+              _switch(l.searchShortcutsTitle, s.searchShortcuts, (v) => s.searchShortcuts = v,
+                  api: 'searchShortcuts', description: l.searchShortcutsDesc),
+            ]),
+            _partCard(Part.input, api: 'customInputField'),
+            _partCard(Part.notice, api: 'newReceiveMessageNotificationBuilder', extra: [
+              if (_custom(Part.notice))
+                SliderRow(
+                  title: l.scrollThresholdTitle,
+                  api: 'newMessageScrollThreshold',
+                  valueLabel: '${s.scrollThreshold.round()}px',
+                  value: s.scrollThreshold,
+                  min: 0,
+                  max: 1000,
+                  divisions: 20,
+                  onChanged: (v) => _set(() => s.scrollThreshold = v.roundToDouble()),
+                ),
+            ]),
+            _partCard(Part.separator, api: 'dateSeparatorBuilder'),
+            _partCard(Part.time, api: 'timeBuilder'),
+            _partCard(Part.profile, api: 'receiverProfileBuilder', extra: [
+              _switch(l.myProfileTitle, s.myProfile, (v) => s.myProfile = v,
+                  api: 'senderProfileBuilder', description: l.myProfileDesc),
+            ]),
+            _partCard(Part.read, api: 'readIndicatorBuilder'),
+            _partCard(Part.readOnly, api: 'readOnlyWidget', extra: [
+              _switch(l.readOnlyTitle, s.readOnly, (v) => s.readOnly = v,
+                  api: 'readOnly', description: l.readOnlyDesc),
+            ]),
+          ],
+        ),
+        SettingsGroup(title: l.sectionLayout, children: [
+          _switch(l.startAtTopTitle, s.messagesStartAtTop, (v) => s.messagesStartAtTop = v,
+              api: 'messagesStartAtTop', description: l.startAtTopDesc),
+          _choice(l.senderSideTitle, s.senderAlignment,
+              {ChatAlignment.end: l.sideRight, ChatAlignment.start: l.sideLeft},
+              (v) => s.senderAlignment = v,
+              api: 'senderAlignment'),
+          SwitchRow(
+            title: l.groupingTitle,
+            api: 'additionalGroupCondition',
+            description: l.groupingDesc,
+            value: s.grouping,
+            onChanged: (v) => _set(() => s.grouping = v, reload: true),
+          ),
+          SliderRow(
+            title: l.maxWidth,
+            api: 'maxWidth',
+            valueLabel: s.unlimited ? l.noLimit : '${s.maxWidth.round()}px',
+            value: s.maxWidth,
+            min: 200,
+            max: unlimitedWidth,
+            onChanged: (v) => _set(() => s.maxWidth = v.roundToDouble()),
+          ),
+          SliderRow(
+            title: l.sidePadding,
+            api: 'padding',
+            valueLabel: '${s.horizontalPadding.round()}px',
+            value: s.horizontalPadding,
+            min: 0,
+            max: 64,
+            onChanged: (v) => _set(() => s.horizontalPadding = v.roundToDouble()),
+          ),
+          SliderRow(
+            title: l.verticalPadding,
+            api: 'padding',
+            valueLabel: '${s.verticalPadding.round()}px',
+            value: s.verticalPadding,
+            min: 0,
+            max: 48,
+            onChanged: (v) => _set(() => s.verticalPadding = v.roundToDouble()),
+          ),
+          FieldRow(
+            title: l.backgroundTitle,
+            child: ColorChoice(
+              colors: chatBackgrounds,
+              selected: s.background,
+              onSelected: (c) => _set(() => s.background = c),
+            ),
+          ),
+          _choice(l.appearAnimation, s.appearMs,
+              {0: l.off, 150: '150ms', 250: '250ms', 500: '500ms'}, (v) => s.appearMs = v,
+              api: 'messageAppearAnimationDuration'),
+        ]),
+        SettingsGroup(title: l.partMenu, description: l.partMenuDesc, children: [
+          _choice(l.kind, s.menu, {
+            MenuKind.popup: l.menuPopup,
+            MenuKind.sheet: l.menuSheet,
+            MenuKind.off: l.off,
+          }, (v) => s.menu = v, api: 'menuConfiguration'),
+          if (s.menu != MenuKind.off) ...[
+            _switch(l.longPressTitle, s.longPress, (v) => s.longPress = v,
+                api: 'enableLongPress', description: l.longPressDesc),
+            _switch(l.hapticTitle, s.haptic, (v) => s.haptic = v, api: 'enableHapticFeedback'),
+          ],
+        ]),
+        SettingsGroup(title: l.sectionBehavior, children: [
+          _switch(l.sendingIndicatorTitle, s.customSendingIndicator,
+              (v) => s.customSendingIndicator = v,
+              api: 'loadingWidget', description: l.sendingIndicatorDesc),
+          _switch(l.confirmDeleteTitle, s.confirmDeleteFailed, (v) => s.confirmDeleteFailed = v,
+              api: 'onDeleteFailedMessage', description: l.confirmDeleteDesc),
+        ]),
+        SettingsGroup(title: l.sectionServer, children: [
+          FieldRow(
             title: l.storedMessages,
             child: SegmentedChoice<PlaygroundHistory>(
               value: s.history,
@@ -573,7 +1120,7 @@ class _PlaygroundPageState extends State<PlaygroundPage> {
               onChanged: (v) => _set(() => s.history = v, reload: true),
             ),
           ),
-          _SliderRow(
+          SliderRow(
             title: l.responseTime,
             valueLabel: l.seconds((s.latencyMs / 1000).toStringAsFixed(1)),
             value: s.latencyMs.toDouble(),
@@ -582,174 +1129,32 @@ class _PlaygroundPageState extends State<PlaygroundPage> {
             onChanged: (v) => setState(() => s.latencyMs = (v / 100).round() * 100),
             onChangeEnd: (_) => _reloadRoom(),
           ),
-          _SwitchRow(
+          SwitchRow(
             title: l.imagesTitle,
             description: l.imagesDesc,
             value: s.images,
             onChanged: (v) => _set(() => s.images = v, reload: true),
           ),
-          _FieldRow(
-            title: l.sendResult,
-            child: SegmentedChoice<PlaygroundSendResult>(
-              value: s.sendResult,
-              options: {
-                PlaygroundSendResult.success: l.resultSuccess,
-                PlaygroundSendResult.fail: l.resultFail,
-                PlaygroundSendResult.block: l.resultBlock,
-              },
-              onChanged: (v) => _set(() => s.sendResult = v),
-            ),
-          ),
-          _SwitchRow(
-            title: l.autoReplyTitle,
-            description: l.autoReplyDesc,
-            value: s.autoReply,
-            onChanged: (v) => _set(() => s.autoReply = v),
-          ),
-        ]),
-        _group(l.sectionLayout, [
-          _SwitchRow(
-            title: l.startAtTopTitle,
-            api: 'messagesStartAtTop',
-            description: l.startAtTopDesc,
-            value: s.messagesStartAtTop,
-            onChanged: (v) => _set(() => s.messagesStartAtTop = v),
-          ),
-          _FieldRow(
-            title: l.senderSideTitle,
-            api: 'senderAlignment',
-            child: SegmentedChoice<ChatAlignment>(
-              value: s.senderAlignment,
-              options: {ChatAlignment.end: l.sideRight, ChatAlignment.start: l.sideLeft},
-              onChanged: (v) => _set(() => s.senderAlignment = v),
-            ),
-          ),
-          _SliderRow(
-            title: l.sidePadding,
-            api: 'padding',
-            valueLabel: '${s.horizontalPadding.round()}px',
-            value: s.horizontalPadding,
-            min: 0,
-            max: 64,
-            onChanged: (v) => _set(() => s.horizontalPadding = v),
-          ),
-        ]),
-        _group(l.sectionBubble, [
-          _FieldRow(
-            title: l.bubbleColor,
-            child: Wrap(spacing: 10, runSpacing: 10, children: [
-              for (final c in _palette)
-                GestureDetector(
-                  onTap: () => _set(() => s.senderColor = c),
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 200),
-                    width: 32,
-                    height: 32,
-                    decoration: BoxDecoration(
-                      color: c,
-                      shape: BoxShape.circle,
-                      border: Border.all(
-                        color: s.senderColor == c ? Colors.white : Colors.transparent,
-                        width: 3,
-                      ),
-                      boxShadow: [
-                        if (s.senderColor == c) BoxShadow(color: c, spreadRadius: 2),
-                      ],
-                    ),
-                  ),
-                ),
-            ]),
-          ),
-          _SliderRow(
-            title: l.cornerRadius,
-            valueLabel: '${s.bubbleRadius.round()}px',
-            value: s.bubbleRadius,
-            min: 0,
-            max: 24,
-            onChanged: (v) => _set(() => s.bubbleRadius = v),
-          ),
-          _SliderRow(
-            title: l.maxWidth,
-            api: 'maxWidth',
-            valueLabel: s.unlimitedWidth ? l.noLimit : '${s.bubbleMaxWidth.round()}px',
-            value: s.bubbleMaxWidth,
-            min: 200,
-            max: _unlimitedWidth,
-            onChanged: (v) => _set(() => s.bubbleMaxWidth = v),
-          ),
-          _FieldRow(
-            title: l.appearAnimation,
-            api: 'messageAppearAnimationDuration',
-            child: SegmentedChoice<int>(
-              value: s.appearMs,
-              options: {0: l.off, 150: '150ms', 250: '250ms', 500: '500ms'},
-              onChanged: (v) => _set(() => s.appearMs = v),
-            ),
-          ),
-        ]),
-        _group(l.sectionDisplay, [
-          _SwitchRow(
-            title: l.timeTitle,
-            api: 'timeBuilder',
-            description: l.timeDesc,
-            value: s.customTime,
-            onChanged: (v) => _set(() => s.customTime = v),
-          ),
-          _SwitchRow(
-            title: l.profileTitle,
-            api: 'receiverProfileBuilder',
-            value: s.receiverProfile,
-            onChanged: (v) => _set(() => s.receiverProfile = v),
-          ),
-          _SwitchRow(
-            title: l.unreadTitle,
-            api: 'readIndicatorBuilder',
-            description: l.unreadDesc,
-            value: s.readIndicator,
-            onChanged: (v) => _set(() => s.readIndicator = v),
-          ),
-          _SwitchRow(
-            title: l.longPressMenuTitle,
-            api: 'menuConfiguration',
-            value: s.bubbleMenu,
-            onChanged: (v) => _set(() => s.bubbleMenu = v),
-          ),
-          _SwitchRow(
-            title: l.notificationTitle,
-            api: 'newReceiveMessageNotificationBuilder',
-            description: l.notificationDesc,
-            value: s.newMessageNotification,
-            onChanged: (v) => _set(() => s.newMessageNotification = v),
-          ),
-          _SwitchRow(
-            title: l.dateSeparatorTitle,
-            api: 'dateSeparatorBuilder',
-            value: s.customDateSeparator,
-            onChanged: (v) => _set(() => s.customDateSeparator = v),
-          ),
-          _SwitchRow(
-            title: l.readOnlyTitle,
-            api: 'readOnly',
-            description: l.readOnlyDesc,
-            value: s.readOnly,
-            onChanged: (v) => _set(() => s.readOnly = v),
-          ),
+          _choice(l.sendResult, s.sendResult, {
+            PlaygroundSendResult.success: l.resultSuccess,
+            PlaygroundSendResult.fail: l.resultFail,
+            PlaygroundSendResult.block: l.resultBlock,
+          }, (v) => s.sendResult = v),
+          _switch(l.autoReplyTitle, s.autoReply, (v) => s.autoReply = v,
+              description: l.autoReplyDesc),
         ]),
       ],
     );
   }
+}
 
-  Widget _group(String title, List<Widget> rows) => Padding(
-        padding: const EdgeInsets.only(bottom: 16),
-        child: SiteCard(
-          padding: const EdgeInsets.fromLTRB(20, 20, 20, 8),
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(title, style: Theme.of(context).textTheme.titleMedium),
-            const SizedBox(height: 4),
-            ...rows,
-          ]),
-        ),
-      );
+class _MenuAction {
+  const _MenuAction(this.label, this.icon, this.onSelected, {this.danger = false});
+
+  final String label;
+  final IconData icon;
+  final BubbleMenuItemCallback onSelected;
+  final bool danger;
 }
 
 class _Avatar extends StatelessWidget {
@@ -778,197 +1183,71 @@ class _Avatar extends StatelessWidget {
       );
 }
 
-// -----------------------------------------------------------------------------
-// Setting rows
-
-class _RowLabel extends StatelessWidget {
-  const _RowLabel({required this.title, this.api, this.description});
-
-  final String title;
-  final String? api;
-  final String? description;
-
-  @override
-  Widget build(BuildContext context) => Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Wrap(
-            spacing: 6,
-            runSpacing: 4,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            children: [
-              Text(title,
-                  style: const TextStyle(
-                      fontSize: 15, fontWeight: FontWeight.w500, color: SiteColors.grey800)),
-              if (api != null)
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: SiteColors.grey100,
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                  child: Text(api!,
-                      style: const TextStyle(
-                          fontSize: 11, fontFamily: 'monospace', color: SiteColors.grey600)),
-                ),
-            ],
-          ),
-          if (description != null) ...[
-            const SizedBox(height: 2),
-            Text(description!,
-                style: const TextStyle(fontSize: 13, color: SiteColors.grey500)),
-          ],
-        ],
-      );
-}
-
-class _SwitchRow extends StatelessWidget {
-  const _SwitchRow({
-    required this.title,
-    this.api,
-    this.description,
-    required this.value,
-    required this.onChanged,
+/// The search bar designed in the studio, wired to the [ChatSearchController]
+/// ([ChatConfiguration.searchBarBuilder]).
+class _StudioSearchBar extends StatefulWidget {
+  const _StudioSearchBar({
+    required this.search,
+    required this.spec,
+    required this.textOf,
+    required this.actionLabel,
+    required this.hint,
   });
 
-  final String title;
-  final String? api;
-  final String? description;
-  final bool value;
-  final ValueChanged<bool> onChanged;
+  final ChatSearchController search;
+  final StudioSpec spec;
+  final String Function(StudioElement, {ChatSearchController? search}) textOf;
+  final String Function(ButtonAction) actionLabel;
+  final String hint;
 
   @override
-  Widget build(BuildContext context) => InkWell(
-        borderRadius: BorderRadius.circular(12),
-        onTap: () => onChanged(!value),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 12),
-          child: Row(children: [
-            Expanded(child: _RowLabel(title: title, api: api, description: description)),
-            const SizedBox(width: 12),
-            Switch(value: value, onChanged: onChanged),
-          ]),
+  State<_StudioSearchBar> createState() => _StudioSearchBarState();
+}
+
+class _StudioSearchBarState extends State<_StudioSearchBar> {
+  late final _text = TextEditingController(text: widget.search.query);
+  final _focus = FocusNode();
+
+  @override
+  void initState() {
+    super.initState();
+    // Take the focus when the search is opened, e.g. with Ctrl/⌘ + F.
+    widget.search.focusRequests.addListener(_focus.requestFocus);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _focus.requestFocus());
+  }
+
+  @override
+  void dispose() {
+    widget.search.focusRequests.removeListener(_focus.requestFocus);
+    _text.dispose();
+    _focus.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final search = widget.search;
+    return ListenableBuilder(
+      listenable: search,
+      builder: (context, _) => renderStudio(
+        widget.spec,
+        StudioBinding(
+          text: (e) => widget.textOf(e, search: search),
+          field: _text,
+          focus: _focus,
+          hint: widget.hint,
+          onSubmitted: (value) {
+            search.search(value);
+            _focus.requestFocus();
+          },
+          actions: {
+            ButtonAction.older: search.hasOlder ? search.showOlder : null,
+            ButtonAction.newer: search.hasNewer ? search.showNewer : null,
+            ButtonAction.close: search.close,
+          },
+          actionLabel: widget.actionLabel,
         ),
-      );
-}
-
-class _FieldRow extends StatelessWidget {
-  const _FieldRow({required this.title, this.api, required this.child});
-
-  final String title;
-  final String? api;
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) => Padding(
-        padding: const EdgeInsets.symmetric(vertical: 12),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          _RowLabel(title: title, api: api),
-          const SizedBox(height: 10),
-          child,
-        ]),
-      );
-}
-
-class _SliderRow extends StatelessWidget {
-  const _SliderRow({
-    required this.title,
-    this.api,
-    required this.valueLabel,
-    required this.value,
-    required this.min,
-    required this.max,
-    required this.onChanged,
-    this.onChangeEnd,
-  });
-
-  final String title;
-  final String? api;
-  final String valueLabel;
-  final double value;
-  final double min;
-  final double max;
-  final ValueChanged<double> onChanged;
-  final ValueChanged<double>? onChangeEnd;
-
-  @override
-  Widget build(BuildContext context) => Padding(
-        padding: const EdgeInsets.only(top: 12),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Row(children: [
-            Expanded(child: _RowLabel(title: title, api: api)),
-            Text(valueLabel,
-                style: const TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                  color: SiteColors.blue,
-                  fontFeatures: [FontFeature.tabularFigures()],
-                )),
-          ]),
-          SliderTheme(
-            data: SliderTheme.of(context).copyWith(
-              overlayShape: const RoundSliderOverlayShape(overlayRadius: 16),
-            ),
-            child: Slider(
-              value: value.clamp(min, max),
-              min: min,
-              max: max,
-              onChanged: onChanged,
-              onChangeEnd: onChangeEnd,
-            ),
-          ),
-        ]),
-      );
-}
-
-/// Mutually exclusive choice: a grey track with the selected segment raised in white.
-class SegmentedChoice<T> extends StatelessWidget {
-  const SegmentedChoice({
-    super.key,
-    required this.value,
-    required this.options,
-    required this.onChanged,
-  });
-
-  final T value;
-  final Map<T, String> options;
-  final ValueChanged<T> onChanged;
-
-  @override
-  Widget build(BuildContext context) => Container(
-        padding: const EdgeInsets.all(3),
-        decoration: BoxDecoration(
-          color: SiteColors.grey100,
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: Row(children: [
-          for (final entry in options.entries)
-            Expanded(
-              child: GestureDetector(
-                key: ValueKey('segment-${entry.key}'),
-                behavior: HitTestBehavior.opaque,
-                onTap: () => onChanged(entry.key),
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 200),
-                  curve: const Cubic(0.22, 0.61, 0.36, 1),
-                  height: 34,
-                  alignment: Alignment.center,
-                  decoration: BoxDecoration(
-                    color: entry.key == value ? Colors.white : Colors.transparent,
-                    borderRadius: BorderRadius.circular(9),
-                    boxShadow: entry.key == value ? SiteShadows.card : null,
-                  ),
-                  child: Text(
-                    entry.value,
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: entry.key == value ? FontWeight.w600 : FontWeight.w500,
-                      color: entry.key == value ? SiteColors.grey900 : SiteColors.grey500,
-                    ),
-                  ),
-                ),
-              ),
-            ),
-        ]),
-      );
+      ),
+    );
+  }
 }

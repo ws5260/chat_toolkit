@@ -69,6 +69,51 @@ flutter:
   assets:
     - assets/logo.png
 
+  # Noto Sans, subset to the characters this site uses (plus the 2,350 common Hangul syllables
+  # and kana for typing). Flutter web otherwise fetches fonts at runtime and shows boxes until
+  # they arrive.
+  fonts:
+    - family: NotoSans
+      fonts:
+        - asset: assets/fonts/NotoSans-400.ttf
+          weight: 400
+        - asset: assets/fonts/NotoSans-500.ttf
+          weight: 500
+        - asset: assets/fonts/NotoSans-600.ttf
+          weight: 600
+        - asset: assets/fonts/NotoSans-700.ttf
+          weight: 700
+    - family: NotoSansKR
+      fonts:
+        - asset: assets/fonts/NotoSansKR-400.ttf
+          weight: 400
+        - asset: assets/fonts/NotoSansKR-500.ttf
+          weight: 500
+        - asset: assets/fonts/NotoSansKR-600.ttf
+          weight: 600
+        - asset: assets/fonts/NotoSansKR-700.ttf
+          weight: 700
+    - family: NotoSansJP
+      fonts:
+        - asset: assets/fonts/NotoSansJP-400.ttf
+          weight: 400
+        - asset: assets/fonts/NotoSansJP-500.ttf
+          weight: 500
+        - asset: assets/fonts/NotoSansJP-600.ttf
+          weight: 600
+        - asset: assets/fonts/NotoSansJP-700.ttf
+          weight: 700
+    - family: NotoSansSC
+      fonts:
+        - asset: assets/fonts/NotoSansSC-400.ttf
+          weight: 400
+        - asset: assets/fonts/NotoSansSC-500.ttf
+          weight: 500
+        - asset: assets/fonts/NotoSansSC-600.ttf
+          weight: 600
+        - asset: assets/fonts/NotoSansSC-700.ttf
+          weight: 700
+
   # To add assets to your application, add an assets section, like this:
   # assets:
   #   - images/a_dot_burr.jpeg
