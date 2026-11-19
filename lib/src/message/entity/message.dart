@@ -98,6 +98,25 @@ abstract class Message {
   /// Whether this is a [SenderMessage] (sent by the current user).
   bool get isSender => this is SenderMessage;
 
+  /// A one-line summary of this message: the [MessageElement.previewText] of
+  /// its elements, joined with spaces (line breaks become spaces). Empty when
+  /// no element has one.
+  ///
+  /// Handy for a new message notice that shows who wrote what:
+  ///
+  /// ```dart
+  /// ChatConfiguration(
+  ///   newReceiveMessageNotificationBuilder: (context, message, controller) =>
+  ///       Text('${message.name}: ${message.previewText}'),
+  /// )
+  /// ```
+  String get previewText => elements
+      .map((e) => e.previewText?.trim())
+      .whereType<String>()
+      .where((text) => text.isNotEmpty)
+      .join(' ')
+      .replaceAll(RegExp(r'\s+'), ' ');
+
   /// Returns a copy of this message with the given fields replaced.
   ///
   /// The copy has the same type as this message. [name] and [serverUuid]

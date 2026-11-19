@@ -66,6 +66,22 @@ abstract class MessageElement {
   /// bounded, its height is not.
   Widget toWidget(BuildContext context);
 
+  /// A short plain-text summary of this element, or `null` to leave it out.
+  ///
+  /// Used by [Message.previewText], e.g. for a new message notice
+  /// ([ChatConfiguration.newReceiveMessageNotificationBuilder]) that shows
+  /// what arrived. Return the text of a text element, or a word such as
+  /// "Photo" for an image. Defaults to `null`.
+  ///
+  /// ```dart
+  /// class TextElement extends MessageElement {
+  ///   // ...
+  ///   @override
+  ///   String get previewText => text;
+  /// }
+  /// ```
+  String? get previewText => null;
+
   /// Returns a copy of this element.
   ///
   /// Not called by the toolkit. Subclasses may narrow the return type and

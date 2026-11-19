@@ -458,6 +458,7 @@ fix: Add missing filename configuration for web platform
   - `SearchHighlightedText` marks the search term inside a message element.
 - **Jump to a message**: `ChatController.scrollToMessage` scrolls to a loaded message, and `ChatController.setMessagesAround` loads an earlier part of the conversation around a message. The revealed message is highlighted (`ChatConfiguration.messageHighlightBuilder`, `messageHighlightDuration`).
 - **Loading newer messages** below an earlier part of the conversation: `ChatController.hasNewerMessages`, `ChatController.addNewerMessages` and `Chat.onScrollToBottom`.
+- `MessageElement.previewText` and `Message.previewText`: a one-line summary of a message (e.g. "Photo Look at this"), so a new message notice can show who wrote what: `'${message.name}: ${message.previewText}'`.
 
 ### 추가
 
@@ -467,3 +468,4 @@ fix: Add missing filename configuration for web platform
   - `SearchHighlightedText` 로 메시지 요소 안의 검색어를 표시합니다.
 - **메시지로 이동**: `ChatController.scrollToMessage` 로 불러온 메시지로 스크롤하고, `ChatController.setMessagesAround` 로 특정 메시지 주변의 이전 대화를 불러옵니다. 이동한 메시지는 강조됩니다 (`ChatConfiguration.messageHighlightBuilder`, `messageHighlightDuration`).
 - 이전 대화를 보는 중 아래쪽의 **최신 메시지 이어 불러오기**: `ChatController.hasNewerMessages`, `ChatController.addNewerMessages`, `Chat.onScrollToBottom`.
+- `MessageElement.previewText`, `Message.previewText`: 메시지의 한 줄 요약 (예: "사진 이것 좀 봐"). 새 메시지 알림에서 누가 무엇을 보냈는지 보여줄 수 있습니다: `'${message.name}: ${message.previewText}'`.
