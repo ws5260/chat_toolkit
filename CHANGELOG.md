@@ -447,3 +447,23 @@ fix: Add missing filename configuration for web platform
 
 - Flutter 3.47.0 이상(Dart 3.13)이 필요합니다. 이전 Flutter 버전을 쓰는 앱은 계속 2.1.1 을 받습니다.
 - deprecated 된 `package:flutter/material.dart` 대신, Flutter 에서 분리된 [`material_ui`](https://pub.dev/packages/material_ui) 패키지를 사용합니다.
+
+## 2.3.0
+
+### Added
+
+- **In-chat search**: pass a `ChatSearchController` to `Chat.searchController` to search the conversation. `onSearch` returns the ids of the matching messages; results are stepped through with `showOlder` / `showNewer`, and `onLoadAround` loads the messages around a result that is not loaded yet.
+  - `ChatSearchBar`, the default bar shown above the messages, with its texts, `decoration` and `style`. Replace it with `ChatConfiguration.searchBarBuilder`.
+  - Keyboard shortcuts (`ChatConfiguration.searchShortcuts`, `defaultChatSearchShortcuts`): Ctrl/⌘ + F opens, Enter / Ctrl/⌘ + G / F3 and Shift + Enter / Ctrl/⌘ + Shift + G go to the older / newer result, Esc closes.
+  - `SearchHighlightedText` marks the search term inside a message element.
+- **Jump to a message**: `ChatController.scrollToMessage` scrolls to a loaded message, and `ChatController.setMessagesAround` loads an earlier part of the conversation around a message. The revealed message is highlighted (`ChatConfiguration.messageHighlightBuilder`, `messageHighlightDuration`).
+- **Loading newer messages** below an earlier part of the conversation: `ChatController.hasNewerMessages`, `ChatController.addNewerMessages` and `Chat.onScrollToBottom`.
+
+### 추가
+
+- **채팅 내 검색**: `Chat.searchController` 에 `ChatSearchController` 를 넘기면 대화를 검색할 수 있습니다. `onSearch` 는 일치하는 메시지의 id 를 반환하고, 결과는 `showOlder` / `showNewer` 로 이동하며, 아직 불러오지 않은 결과는 `onLoadAround` 로 주변 메시지를 불러옵니다.
+  - 메시지 위에 표시되는 기본 검색창 `ChatSearchBar` (문구, `decoration`, `style` 지정 가능). `ChatConfiguration.searchBarBuilder` 로 교체할 수 있습니다.
+  - 키보드 단축키 (`ChatConfiguration.searchShortcuts`, `defaultChatSearchShortcuts`): Ctrl/⌘ + F 열기, Enter / Ctrl/⌘ + G / F3 와 Shift + Enter / Ctrl/⌘ + Shift + G 로 이전 / 다음 결과, Esc 닫기.
+  - `SearchHighlightedText` 로 메시지 요소 안의 검색어를 표시합니다.
+- **메시지로 이동**: `ChatController.scrollToMessage` 로 불러온 메시지로 스크롤하고, `ChatController.setMessagesAround` 로 특정 메시지 주변의 이전 대화를 불러옵니다. 이동한 메시지는 강조됩니다 (`ChatConfiguration.messageHighlightBuilder`, `messageHighlightDuration`).
+- 이전 대화를 보는 중 아래쪽의 **최신 메시지 이어 불러오기**: `ChatController.hasNewerMessages`, `ChatController.addNewerMessages`, `Chat.onScrollToBottom`.
