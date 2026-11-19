@@ -460,6 +460,11 @@ fix: Add missing filename configuration for web platform
 - **Loading newer messages** below an earlier part of the conversation: `ChatController.hasNewerMessages`, `ChatController.addNewerMessages` and `Chat.onScrollToBottom`.
 - `MessageElement.previewText` and `Message.previewText`: a one-line summary of a message (e.g. "Photo Look at this"), so a new message notice can show who wrote what: `'${message.name}: ${message.previewText}'`.
 
+### Fixed
+
+- The new message notice now also works when `newReceiveMessageNotificationBuilder` is set after the `Chat` was first built (e.g. switched on by a setting). Before, it only worked when set from the start.
+- `Chat` no longer keeps listening to `ChatController.newReceiveMessageStream` after it is disposed.
+
 ### 추가
 
 - **채팅 내 검색**: `Chat.searchController` 에 `ChatSearchController` 를 넘기면 대화를 검색할 수 있습니다. `onSearch` 는 일치하는 메시지의 id 를 반환하고, 결과는 `showOlder` / `showNewer` 로 이동하며, 아직 불러오지 않은 결과는 `onLoadAround` 로 주변 메시지를 불러옵니다.
@@ -469,3 +474,8 @@ fix: Add missing filename configuration for web platform
 - **메시지로 이동**: `ChatController.scrollToMessage` 로 불러온 메시지로 스크롤하고, `ChatController.setMessagesAround` 로 특정 메시지 주변의 이전 대화를 불러옵니다. 이동한 메시지는 강조됩니다 (`ChatConfiguration.messageHighlightBuilder`, `messageHighlightDuration`).
 - 이전 대화를 보는 중 아래쪽의 **최신 메시지 이어 불러오기**: `ChatController.hasNewerMessages`, `ChatController.addNewerMessages`, `Chat.onScrollToBottom`.
 - `MessageElement.previewText`, `Message.previewText`: 메시지의 한 줄 요약 (예: "사진 이것 좀 봐"). 새 메시지 알림에서 누가 무엇을 보냈는지 보여줄 수 있습니다: `'${message.name}: ${message.previewText}'`.
+
+### 수정
+
+- `newReceiveMessageNotificationBuilder` 를 `Chat` 이 처음 만들어진 뒤에 설정해도 (예: 설정으로 켰을 때) 새 메시지 알림이 동작합니다. 이전에는 처음부터 설정한 경우에만 동작했습니다.
+- `Chat` 이 dispose 된 뒤에는 `ChatController.newReceiveMessageStream` 을 더 이상 구독하지 않습니다.

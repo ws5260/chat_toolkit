@@ -228,6 +228,7 @@ class _ChatState extends State<Chat> {
   Timer? _debounceTimer;
   final Duration _debounceDuration = const Duration(milliseconds: 100);
   bool _isScrollable = false;
+  StreamSubscription<Message>? _newReceiveMessageSubscription;
   bool _olderEndCheckScheduled = false;
   Timer? _newerDebounceTimer;
 
@@ -250,23 +251,25 @@ class _ChatState extends State<Chat> {
     // Ctrl+F from reaching the widgets above it, to leave them to the browser.
     HardwareKeyboard.instance.addHandler(_onKey);
 
-    if (widget.configuration.newReceiveMessageNotificationBuilder != null) {
-      chatController.newReceiveMessageStream.listen((message) {
-        _isScrollable = true;
-        if (chatController.isAtBottom(threshold: widget.configuration.newMessageScrollThreshold)) {
-          showNewReceiveMessageIndicator.value = null;
-          chatController.scrollToBottom();
-        } else {
-          showNewReceiveMessageIndicator.value = message;
-        }
-      });
-    }
+    // Always listened to, and the configuration read per message: a notification builder set
+    // after the chat was built (e.g. a setting switched on) works too.
+    _newReceiveMessageSubscription = chatController.newReceiveMessageStream.listen((message) {
+      if (widget.configuration.newReceiveMessageNotificationBuilder == null) return;
+      _isScrollable = true;
+      if (chatController.isAtBottom(threshold: widget.configuration.newMessageScrollThreshold)) {
+        showNewReceiveMessageIndicator.value = null;
+        chatController.scrollToBottom();
+      } else {
+        showNewReceiveMessageIndicator.value = message;
+      }
+    });
   }
 
   @override
   void dispose() {
     _debounceTimer?.cancel();
     _newerDebounceTimer?.cancel();
+    _newReceiveMessageSubscription?.cancel();
     chatController.removeListener(_onScroll);
     chatController.scrollToMessageHandler = null;
     HardwareKeyboard.instance.removeHandler(_onKey);
