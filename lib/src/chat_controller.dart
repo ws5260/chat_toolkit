@@ -3,6 +3,7 @@ import 'dart:collection';
 
 import 'package:flutter/foundation.dart';
 import 'package:material_ui/material_ui.dart';
+
 import 'message/entity/failed_message_entry.dart';
 import 'message/entity/message.dart';
 import 'message/entity/message_group.dart';
@@ -72,8 +73,7 @@ typedef CustomSortCallback = int Function(Message a, Message b);
 ///   additionalGroupCondition: (group, message) => group.messages.length < 10,
 /// );
 /// ```
-typedef AdditionalGroupCondition =
-    bool Function(MessageGroup group, Message message);
+typedef AdditionalGroupCondition = bool Function(MessageGroup group, Message message);
 
 /// Thrown by a [MessageDispatchCallback] when the server refuses the message.
 ///
@@ -164,11 +164,7 @@ class MessageDispatchResult {
   final Exception? exception;
 
   /// Creates a [MessageDispatchResult].
-  MessageDispatchResult({
-    required this.message,
-    required this.isSuccess,
-    this.exception,
-  });
+  MessageDispatchResult({required this.message, required this.isSuccess, this.exception});
 }
 
 /// Holds the messages of a [Chat] and controls its scroll position.
@@ -222,8 +218,7 @@ class MessageDispatchResult {
 class ChatController extends ScrollController {
   final StreamController<MessageDispatchResult> _dispatchResultController =
       StreamController.broadcast();
-  final StreamController<Message> _newReceiveMessageController =
-      StreamController.broadcast();
+  final StreamController<Message> _newReceiveMessageController = StreamController.broadcast();
 
   /// Emits the result of every [dispatchMessage] and [retryMessage] call.
   ///
@@ -242,8 +237,7 @@ class ChatController extends ScrollController {
   ///   if (!result.isSuccess) log('Not sent: ${result.exception}');
   /// });
   /// ```
-  Stream<MessageDispatchResult> get dispatchResultStream =>
-      _dispatchResultController.stream;
+  Stream<MessageDispatchResult> get dispatchResultStream => _dispatchResultController.stream;
 
   /// Emits the [ReceiverMessage]s returned by a [MessageDispatchCallback].
   ///
@@ -255,8 +249,7 @@ class ChatController extends ScrollController {
   /// [Chat] listens to it to auto-scroll or to show
   /// [ChatConfiguration.newReceiveMessageNotificationBuilder]. This is a
   /// broadcast stream, delivered asynchronously, and closed by [dispose].
-  Stream<Message> get newReceiveMessageStream =>
-      _newReceiveMessageController.stream;
+  Stream<Message> get newReceiveMessageStream => _newReceiveMessageController.stream;
 
   final List<MessageGroup> _messageGroups = [];
 
@@ -277,9 +270,7 @@ class ChatController extends ScrollController {
   ///   for (final group in controller.messageGroups) ...group.messages,
   /// ];
   /// ```
-  late final List<MessageGroup> messageGroups = UnmodifiableListView(
-    _messageGroups,
-  );
+  late final List<MessageGroup> messageGroups = UnmodifiableListView(_messageGroups);
 
   final Map<String, FailedMessageEntry> _failedMessageEntries = {};
 
@@ -332,6 +323,52 @@ class ChatController extends ScrollController {
   // ChatControllerInternal.messagesRevision.
   final ValueNotifier<int> _messagesRevision = ValueNotifier(0);
 
+  // Number of groups shown above the scroll anchor while viewing an earlier part of the
+  // conversation (after setMessagesAround). Those groups grow upward; the rest grow downward, so
+  // loading in either direction leaves the visible messages in place. `null`: a single list
+  // anchored at the newest message.
+  int? _olderGroupCount;
+
+  bool _hasNewerMessages = false;
+
+  // Set by the attached Chat, which owns the list that can scroll to a given message.
+  Future<bool> Function(String messageId, double alignment, Duration? duration, bool onlyIfHidden)?
+  _scrollToMessageHandler;
+
+  double _splitAlignment = 0.5;
+
+  final ValueNotifier<({String messageId, int serial})?> _highlightedMessage = ValueNotifier(null);
+  int _highlightSerial = 0;
+
+  /// Whether newer messages than the newest loaded one exist on your server.
+  ///
+  /// `true` after [setMessagesAround] or [addNewerMessages] with more to load,
+  /// i.e. while an earlier part of the conversation is shown. While it is
+  /// `true`, [Chat.onScrollToBottom] is called when the list reaches its
+  /// newest loaded message. [setMessages] resets it to `false`.
+  ///
+  /// Typical uses: show a "jump to latest" button, and reload the latest
+  /// messages with [setMessages] before sending, since a sent message belongs
+  /// after the newest one.
+  bool get hasNewerMessages => _hasNewerMessages;
+
+  // Removes [group], keeping [_olderGroupCount] in step.
+  void _removeGroup(MessageGroup group) {
+    final index = _messageGroups.indexOf(group);
+    if (index < 0) return;
+    _messageGroups.removeAt(index);
+    final olderCount = _olderGroupCount;
+    if (olderCount != null && index < olderCount) _olderGroupCount = olderCount - 1;
+  }
+
+  // Leaves the split list of setMessagesAround. The structure of the list changes, so first move
+  // to offset 0, which is valid in both layouts.
+  void _resetSplit() {
+    if (_olderGroupCount != null && hasClients) jumpTo(0);
+    _olderGroupCount = null;
+    _hasNewerMessages = false;
+  }
+
   // Also calls notifyListeners because direct controller listeners (e.g. Chat._onScroll)
   // have always been notified of message changes.
   void _notifyMessagesChanged() {
@@ -370,6 +407,11 @@ class ChatController extends ScrollController {
   /// ]);
   /// ```
   void setMessages(List<Message> messages) {
+    _resetSplit();
+    _replaceMessages(messages);
+  }
+
+  void _replaceMessages(List<Message> messages) {
     _messageGroups.clear();
     _unreadMessageIds.clear();
     _appearPendingIds.clear();
@@ -437,8 +479,7 @@ class ChatController extends ScrollController {
         }
       }
       final MessageGroup group;
-      if (_messageGroups.isEmpty ||
-          !_canJoinGroup(_messageGroups.last, message)) {
+      if (_messageGroups.isEmpty || !_canJoinGroup(_messageGroups.last, message)) {
         group = MessageGroup(
           name: message.name,
           isSender: message.isSender,
@@ -491,6 +532,8 @@ class ChatController extends ScrollController {
         _unreadMessageIds.add(message.id);
       }
       if (_messageGroups.isEmpty) {
+        final olderCount = _olderGroupCount;
+        if (olderCount != null) _olderGroupCount = olderCount + 1;
         _messageGroups.add(
           MessageGroup(
             name: message.name,
@@ -504,6 +547,8 @@ class ChatController extends ScrollController {
       if (_canJoinGroup(_messageGroups.first, message)) {
         _messageGroups.first.mutableMessages.insert(0, message);
       } else {
+        final olderCount = _olderGroupCount;
+        if (olderCount != null) _olderGroupCount = olderCount + 1;
         _messageGroups.insert(
           0,
           MessageGroup(
@@ -516,6 +561,142 @@ class ChatController extends ScrollController {
       }
     }
     _notifyMessagesChanged();
+  }
+
+  /// Replaces the messages with a part of the conversation around
+  /// [anchorMessageId], then scrolls to that message and highlights it.
+  ///
+  /// Use it to open a search result or a reply's original message that is
+  /// not loaded. Load [messages] around the anchor from your server, in any
+  /// order, and pass [hasNewerMessages] `true` when newer messages than the
+  /// last of them exist. Then:
+  ///
+  /// * Scrolling up calls [Chat.onScrollToTop] as before; add older
+  ///   messages with [appendMessages].
+  /// * Scrolling down to the newest loaded message calls
+  ///   [Chat.onScrollToBottom]; add newer messages with [addNewerMessages].
+  /// * Neither moves the messages on screen.
+  /// * [setMessages] with the latest messages returns to the present.
+  ///
+  /// [alignment] places the message in the viewport: `0.5` centers it,
+  /// `0.0` puts it at the bottom and `1.0` at the top. Pass [highlight]
+  /// `false` to skip [ChatConfiguration.messageHighlightBuilder].
+  ///
+  /// Completes with `true` once the message is shown, or `false` when
+  /// [anchorMessageId] is not among [messages] or the controller is not
+  /// attached to a [Chat].
+  ///
+  /// ```dart
+  /// Future<void> openSearchResult(String messageId) async {
+  ///   final page = await api.fetchAround(messageId); // e.g. 30 before, 30 after
+  ///   await controller.setMessagesAround(
+  ///     page.messages,
+  ///     anchorMessageId: messageId,
+  ///     hasNewerMessages: page.hasNewer,
+  ///   );
+  /// }
+  /// ```
+  Future<bool> setMessagesAround(
+    List<Message> messages, {
+    required String anchorMessageId,
+    bool hasNewerMessages = true,
+    double alignment = 0.5,
+    bool highlight = true,
+  }) {
+    if (hasClients) jumpTo(0);
+    _olderGroupCount = null;
+    _replaceMessages(messages);
+    _hasNewerMessages = hasNewerMessages;
+    if (hasNewerMessages) {
+      // The anchor's group starts the part that grows downward, at [alignment] of the viewport,
+      // so the first frame shows it without jumping.
+      final anchorIndex = _messageGroups.indexWhere(
+        (group) => group.messages.any((m) => m.id == anchorMessageId),
+      );
+      _olderGroupCount = anchorIndex < 0 ? _messageGroups.length : anchorIndex;
+      _splitAlignment = alignment;
+    }
+    _notifyMessagesChanged();
+    // The split puts the anchor's group at [alignment], so still align the message itself: it may
+    // be further down a group of several messages.
+    return _reveal(anchorMessageId, alignment, null, highlight, onlyIfHidden: false);
+  }
+
+  /// Adds messages newer than the newest loaded one, below it, without
+  /// moving the messages on screen.
+  ///
+  /// The counterpart of [appendMessages] for a list opened with
+  /// [setMessagesAround]: call it from [Chat.onScrollToBottom]. Pass
+  /// [messages] oldest first, and [hasMore] `false` when they reach the
+  /// newest message on your server; [hasNewerMessages] follows it.
+  ///
+  /// ```dart
+  /// Chat(
+  ///   chatController: controller,
+  ///   onScrollToBottom: () async {
+  ///     final newer = await api.fetchAfter(newestLoadedId); // oldest first
+  ///     controller.addNewerMessages(newer, hasMore: newer.length == pageSize);
+  ///   },
+  /// )
+  /// ```
+  void addNewerMessages(List<Message> messages, {bool hasMore = true}) {
+    for (final message in messages) {
+      if (message.isRead == false) _unreadMessageIds.add(message.id);
+      if (_messageGroups.isNotEmpty && _canJoinGroup(_messageGroups.last, message)) {
+        _messageGroups.last.mutableMessages.add(message);
+      } else {
+        _messageGroups.add(
+          MessageGroup(
+            name: message.name,
+            isSender: message.isSender,
+            timestamp: message.timestamp,
+            messages: [message],
+          ),
+        );
+      }
+    }
+    _hasNewerMessages = hasMore;
+    _notifyMessagesChanged();
+  }
+
+  /// Scrolls to a loaded message and highlights it.
+  ///
+  /// [alignment] places the message in the viewport: `0.5` centers it,
+  /// `0.0` puts it at the bottom and `1.0` at the top. Jumps when [duration]
+  /// is `null`, animates otherwise. Pass [highlight] `false` to skip
+  /// [ChatConfiguration.messageHighlightBuilder].
+  ///
+  /// Completes with `true` once the message is shown, or `false` when no
+  /// loaded message has [messageId] or the controller is not attached to a
+  /// [Chat]. For a message that is not loaded, use [setMessagesAround].
+  ///
+  /// ```dart
+  /// final shown = await controller.scrollToMessage(reply.originalId);
+  /// if (!shown) await openAround(reply.originalId);
+  /// ```
+  Future<bool> scrollToMessage(
+    String messageId, {
+    double alignment = 0.5,
+    Duration? duration,
+    bool highlight = true,
+  }) async {
+    return _reveal(messageId, alignment, duration, highlight, onlyIfHidden: false);
+  }
+
+  Future<bool> _reveal(
+    String messageId,
+    double alignment,
+    Duration? duration,
+    bool highlight, {
+    required bool onlyIfHidden,
+  }) async {
+    final handler = _scrollToMessageHandler;
+    if (_isDisposed || handler == null) return false;
+    final shown = await handler(messageId, alignment, duration, onlyIfHidden);
+    if (shown && highlight && !_isDisposed) {
+      _highlightedMessage.value = (messageId: messageId, serial: ++_highlightSerial);
+    }
+    return shown;
   }
 
   /// Creates a [ChatController].
@@ -553,10 +734,7 @@ class ChatController extends ScrollController {
   static bool _defaultCanJoinGroup(MessageGroup group, Message message) {
     return group.isSender == message.isSender &&
         group.name == message.name &&
-        _isSameMinute(
-          DateTime.parse(group.timestamp),
-          DateTime.parse(message.timestamp),
-        );
+        _isSameMinute(DateTime.parse(group.timestamp), DateTime.parse(message.timestamp));
   }
 
   /// Discards the messages and releases the resources of this controller.
@@ -576,20 +754,32 @@ class ChatController extends ScrollController {
     _dispatchResultController.close();
     _newReceiveMessageController.close();
     _messagesRevision.dispose();
+    _highlightedMessage.dispose();
     super.dispose();
   }
 
   static const double _bottomEpsilon = 2.0;
 
-  /// Jumps to the newest message (scroll offset `0`).
+  /// Jumps to the newest loaded message.
   ///
   /// Jumps without animation. Does nothing when the controller is not
   /// attached to a [Chat], is disposed, or is already at the newest message.
   /// Use [animateTo] with offset `0` for an animated scroll.
+  ///
+  /// While [hasNewerMessages] is `true` this is the newest *loaded* message;
+  /// call [setMessages] with the latest messages to return to the present.
   void scrollToBottom() {
     if (_isDisposed || !hasClients) return;
-    if (position.pixels.abs() <= _bottomEpsilon) return;
-    jumpTo(0);
+    if (_olderGroupCount != null) {
+      // Messages added in this frame are laid out below the current bottom, so jump again once
+      // they are laid out.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (_isDisposed || !hasClients) return;
+        jumpTo(position.minScrollExtent);
+      });
+    }
+    if ((position.pixels - position.minScrollExtent).abs() <= _bottomEpsilon) return;
+    jumpTo(position.minScrollExtent);
   }
 
   /// Adds [message] after the newest message and returns its group.
@@ -621,6 +811,9 @@ class ChatController extends ScrollController {
   /// });
   /// ```
   MessageGroup addMessage(Message message) {
+    // In the split list a new message is laid out below the bottom, so the list does not follow
+    // it by itself.
+    if (_olderGroupCount != null && !_hasNewerMessages && isAtBottom()) scrollToBottom();
     if (message.id.isNotEmpty) {
       final existing = _groupOf(message.id);
       if (existing != null) {
@@ -632,8 +825,7 @@ class ChatController extends ScrollController {
     }
     _markAppear(message.id);
     late final MessageGroup messageGroup;
-    if (_messageGroups.isEmpty ||
-        !_canJoinGroup(_messageGroups.last, message)) {
+    if (_messageGroups.isEmpty || !_canJoinGroup(_messageGroups.last, message)) {
       messageGroup = MessageGroup(
         name: message.name,
         isSender: message.isSender,
@@ -647,8 +839,9 @@ class ChatController extends ScrollController {
     }
 
     if (_failedMessageEntries.containsKey(message.id)) {
-      _failedMessageEntries[message.id] = _failedMessageEntries[message.id]!
-          .copyWith(messageGroup: messageGroup);
+      _failedMessageEntries[message.id] = _failedMessageEntries[message.id]!.copyWith(
+        messageGroup: messageGroup,
+      );
     }
 
     if (_failedMessageEntries.isNotEmpty) {
@@ -656,17 +849,14 @@ class ChatController extends ScrollController {
 
       for (final failedId in failedIds) {
         final entry = _failedMessageEntries[failedId]!;
-        final failedMessage = entry.messageGroup.messages.firstWhere(
-          (m) => m.id == failedId,
-        );
+        final failedMessage = entry.messageGroup.messages.firstWhere((m) => m.id == failedId);
 
         entry.messageGroup.mutableMessages.remove(failedMessage);
         if (entry.messageGroup.messages.isEmpty) {
-          _messageGroups.remove(entry.messageGroup);
+          _removeGroup(entry.messageGroup);
         }
         late final MessageGroup newGroup;
-        if (_messageGroups.isNotEmpty &&
-            _canJoinGroup(_messageGroups.last, failedMessage)) {
+        if (_messageGroups.isNotEmpty && _canJoinGroup(_messageGroups.last, failedMessage)) {
           newGroup = _messageGroups.last;
           newGroup.mutableMessages.add(failedMessage);
         } else {
@@ -678,9 +868,7 @@ class ChatController extends ScrollController {
           );
           _messageGroups.add(newGroup);
         }
-        _failedMessageEntries[failedId] = entry.copyWith(
-          messageGroup: newGroup,
-        );
+        _failedMessageEntries[failedId] = entry.copyWith(messageGroup: newGroup);
       }
     }
     if (message.isRead == false) {
@@ -747,9 +935,7 @@ class ChatController extends ScrollController {
     Message message, {
     required MessageDispatchCallback onDispatch,
   }) async {
-    final messageGroup = addMessage(
-      message.copyWith(isLoading: true, isFailed: false),
-    );
+    final messageGroup = addMessage(message.copyWith(isLoading: true, isFailed: false));
     // Show the sent bubble right away, not only after onDispatch completes (a server round trip).
     if (message.isSender) {
       scrollToBottom();
@@ -761,32 +947,20 @@ class ChatController extends ScrollController {
       result = await onDispatch(message);
     } on MessageBlockedException catch (e) {
       // A block is not a failure: remove the bubble and do not register a retry entry.
-      final blockedIndex = messageGroup.messages.indexWhere(
-        (element) => element.id == message.id,
-      );
+      final blockedIndex = messageGroup.messages.indexWhere((element) => element.id == message.id);
       if (blockedIndex >= 0) {
         _removeMessageAt(messageGroup, blockedIndex);
       }
-      final blockedResult = MessageDispatchResult(
-        message: message,
-        isSuccess: false,
-        exception: e,
-      );
+      final blockedResult = MessageDispatchResult(message: message, isSuccess: false, exception: e);
       _dispatchResultController.add(blockedResult);
       _notifyMessagesChanged();
       return blockedResult;
     }
-    final index = messageGroup.messages.indexWhere(
-      (element) => element.id == message.id,
-    );
+    final index = messageGroup.messages.indexWhere((element) => element.id == message.id);
     if (result != null) {
       messageGroup.mutableMessages[index] = result;
       messageGroup.sortMessages();
-      dispatchResult = MessageDispatchResult(
-        message: message,
-        isSuccess: true,
-        exception: null,
-      );
+      dispatchResult = MessageDispatchResult(message: message, isSuccess: true, exception: null);
       if (!result.isSender) {
         _newReceiveMessageController.add(result);
       }
@@ -851,10 +1025,7 @@ class ChatController extends ScrollController {
   ///   controller.registerFailedMessage(m.id, sendToServer);
   /// }
   /// ```
-  void registerFailedMessage(
-    String messageId,
-    MessageDispatchCallback onDispatch,
-  ) {
+  void registerFailedMessage(String messageId, MessageDispatchCallback onDispatch) {
     for (final group in _messageGroups) {
       for (final m in group.messages) {
         if (m.id != messageId) continue;
@@ -939,7 +1110,9 @@ class ChatController extends ScrollController {
     for (final group in _messageGroups.toList()) {
       group.mutableMessages.removeWhere((m) => m.id == message.id);
     }
-    _messageGroups.removeWhere((group) => group.messages.isEmpty);
+    for (final group in _messageGroups.where((g) => g.messages.isEmpty).toList()) {
+      _removeGroup(group);
+    }
     _failedMessageEntries.remove(message.id);
     _unreadMessageIds.remove(message.id);
     _notifyMessagesChanged();
@@ -949,7 +1122,7 @@ class ChatController extends ScrollController {
   void _removeMessage(MessageGroup group, Message message) {
     group.mutableMessages.remove(message);
     if (group.messages.isEmpty) {
-      _messageGroups.remove(group);
+      _removeGroup(group);
     }
     _failedMessageEntries.remove(message.id);
     _unreadMessageIds.remove(message.id);
@@ -962,7 +1135,7 @@ class ChatController extends ScrollController {
   void _removeMessageAt(MessageGroup group, int messageIndex) {
     final message = group.mutableMessages.removeAt(messageIndex);
     if (group.messages.isEmpty) {
-      _messageGroups.remove(group);
+      _removeGroup(group);
     }
     _failedMessageEntries.remove(message.id);
     _unreadMessageIds.remove(message.id);
@@ -986,7 +1159,7 @@ class ChatController extends ScrollController {
   /// whether to call [scrollToBottom] after adding a message.
   bool isAtBottom({double threshold = 20}) {
     if (!hasClients) return true;
-    return position.pixels <= threshold;
+    return position.pixels <= position.minScrollExtent + threshold;
   }
 
   /// The group containing this message, or null if none.
@@ -1058,8 +1231,7 @@ extension ChatControllerInternal on ChatController {
   /// Called by [Chat] when it first builds the message.
   bool takeAppearAnimation(String messageId) {
     final addedAt = _appearPendingIds.remove(messageId);
-    return addedAt != null &&
-        DateTime.now().difference(addedAt) <= ChatController._appearWindow;
+    return addedAt != null && DateTime.now().difference(addedAt) <= ChatController._appearWindow;
   }
 
   /// Incremented only when the message list changes.
@@ -1068,6 +1240,32 @@ extension ChatControllerInternal on ChatController {
   /// the list view listens to this instead of the controller; otherwise the
   /// whole list would be rebuilt on every scroll frame.
   ValueListenable<int> get messagesRevision => _messagesRevision;
+
+  /// Groups shown above the scroll anchor in the split list of
+  /// [ChatController.setMessagesAround]; `null` for the plain list.
+  int? get olderGroupCount => _olderGroupCount;
+
+  /// Set by [Chat] to perform [ChatController.scrollToMessage].
+  set scrollToMessageHandler(
+    Future<bool> Function(
+      String messageId,
+      double alignment,
+      Duration? duration,
+      bool onlyIfHidden,
+    )?
+    handler,
+  ) => _scrollToMessageHandler = handler;
+
+  /// Where the anchor of [ChatController.setMessagesAround] sits in the viewport.
+  double get splitAlignment => _splitAlignment;
+
+  /// The message to highlight, with a serial that changes on every request.
+  ValueListenable<({String messageId, int serial})?> get highlightedMessage => _highlightedMessage;
+
+  /// Clears the highlight of request [serial], unless a newer one replaced it.
+  void clearHighlight(int serial) {
+    if (_highlightedMessage.value?.serial == serial) _highlightedMessage.value = null;
+  }
 
   /// Removes [message] from [group], and the group itself if it becomes empty.
   void removeMessageFromGroup(MessageGroup group, Message message) =>
@@ -1086,7 +1284,7 @@ extension ChatControllerInternal on ChatController {
   void scrollToBottomByValue(double offset) {
     if (!hasClients) return;
     final currentOffset = position.pixels;
-    if (currentOffset <= 0) return;
+    if (currentOffset <= position.minScrollExtent) return;
     jumpTo(currentOffset - offset);
   }
 

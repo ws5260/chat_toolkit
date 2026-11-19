@@ -70,3 +70,5 @@ export 'src/message/elements/message_element.dart';
 export 'src/message/entity/message.dart';
 // MessageGroupInternal is for ChatController only.
 export 'src/message/entity/message_group.dart' hide MessageGroupInternal;
+export 'src/search/chat_search.dart' hide ChatSearchActions;
+export 'src/search/chat_search_controller.dart';

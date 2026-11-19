@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:ui';
 
 import 'package:flutter/rendering.dart';
+import 'package:flutter/services.dart';
 import 'package:gap/gap.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:super_sliver_list/super_sliver_list.dart';
@@ -11,6 +12,8 @@ import 'chat_controller.dart';
 import 'message/entity/message.dart';
 import 'message/entity/message_group.dart';
 import 'message/message_bubble.dart';
+import 'search/chat_search.dart';
+import 'search/chat_search_controller.dart';
 import 'size_detected_widget.dart';
 
 /// A chat view that shows the messages of a [ChatController].
@@ -90,6 +93,8 @@ class Chat extends StatefulWidget {
     this.chatController,
     this.configuration = const ChatConfiguration(),
     this.onScrollToTop,
+    this.onScrollToBottom,
+    this.searchController,
     this.customInputField,
     this.onDeleteFailedMessage,
   });
@@ -158,6 +163,43 @@ class Chat extends StatefulWidget {
   /// ```
   final Future<void> Function()? onScrollToTop;
 
+  /// Called when the list is scrolled to its newest loaded message while
+  /// [ChatController.hasNewerMessages] is `true`, i.e. after
+  /// [ChatController.setMessagesAround] opened an earlier part of the
+  /// conversation. Load the next newer page and add it with
+  /// [ChatController.addNewerMessages].
+  ///
+  /// Like [onScrollToTop] it may be called again while a request is in
+  /// flight, so guard against concurrent loads. It is also called while the
+  /// loaded messages do not reach below the viewport, until they do.
+  ///
+  /// ```dart
+  /// var loadingNewer = false;
+  ///
+  /// Chat(
+  ///   chatController: controller,
+  ///   onScrollToBottom: () async {
+  ///     if (loadingNewer) return;
+  ///     loadingNewer = true;
+  ///     try {
+  ///       final newer = await api.fetchAfter(newestLoadedId); // oldest first
+  ///       controller.addNewerMessages(newer, hasMore: newer.length == pageSize);
+  ///     } finally {
+  ///       loadingNewer = false;
+  ///     }
+  ///   },
+  /// )
+  /// ```
+  final Future<void> Function()? onScrollToBottom;
+
+  /// Search in this chat. See [ChatSearchController].
+  ///
+  /// When set, the chat shows [ChatConfiguration.searchBarBuilder] (by
+  /// default a [ChatSearchBar]) above the messages while the search is open,
+  /// handles [ChatConfiguration.searchShortcuts], and lets
+  /// [SearchHighlightedText] in your message elements mark the query.
+  final ChatSearchController? searchController;
+
   /// Called when the delete button on a failed message is tapped.
   ///
   /// The chat knows nothing about your backend, so delete the message there
@@ -187,12 +229,26 @@ class _ChatState extends State<Chat> {
   final Duration _debounceDuration = const Duration(milliseconds: 100);
   bool _isScrollable = false;
   bool _olderEndCheckScheduled = false;
+  Timer? _newerDebounceTimer;
+
+  // Lists above and below the scroll anchor. Without ChatController.setMessagesAround only the
+  // older one is used.
+  final ListController _olderListController = ListController();
+  final ListController _newerListController = ListController();
+  static const _olderSliverKey = ValueKey('chat_toolkit.older');
+
+  // Contexts of the built messages, to reveal one precisely inside its group.
+  final Map<String, BuildContext> _messageContexts = {};
 
   @override
   void initState() {
     super.initState();
     chatController = widget.chatController ?? ChatController();
     chatController.addListener(_onScroll);
+    chatController.scrollToMessageHandler = _scrollToMessage;
+    // Handled before the focus system: on the web a focused text field stops shortcuts such as
+    // Ctrl+F from reaching the widgets above it, to leave them to the browser.
+    HardwareKeyboard.instance.addHandler(_onKey);
 
     if (widget.configuration.newReceiveMessageNotificationBuilder != null) {
       chatController.newReceiveMessageStream.listen((message) {
@@ -210,6 +266,12 @@ class _ChatState extends State<Chat> {
   @override
   void dispose() {
     _debounceTimer?.cancel();
+    _newerDebounceTimer?.cancel();
+    chatController.removeListener(_onScroll);
+    chatController.scrollToMessageHandler = null;
+    HardwareKeyboard.instance.removeHandler(_onKey);
+    _olderListController.dispose();
+    _newerListController.dispose();
     if (widget.chatController == null) {
       chatController.dispose();
     }
@@ -218,6 +280,7 @@ class _ChatState extends State<Chat> {
   }
 
   void _onScroll() async {
+    _schedulePendingAlign();
     if (widget.configuration.newReceiveMessageNotificationBuilder != null && _isScrollable) {
       if (chatController.isAtBottom(threshold: widget.configuration.newMessageScrollThreshold)) {
         chatController.scrollToBottom();
@@ -249,7 +312,183 @@ class _ChatState extends State<Chat> {
         });
         _debounceTimer = Timer(_debounceDuration, () {});
       }
+      _checkNewerEnd();
     });
+  }
+
+  bool _onKey(KeyEvent event) {
+    final search = widget.searchController;
+    // Not while hidden, e.g. on another page of an IndexedStack.
+    if (search == null || !mounted || !TickerMode.valuesOf(context).enabled) return false;
+    return handleChatSearchKey(event, widget.configuration.searchShortcuts, search);
+  }
+
+  // The newer end of the split list (see ChatController.setMessagesAround) is minScrollExtent.
+  void _checkNewerEnd() {
+    final onScrollToBottom = widget.onScrollToBottom;
+    if (onScrollToBottom == null || !chatController.hasNewerMessages) return;
+    if (_newerDebounceTimer?.isActive ?? false) return;
+    final position = chatController.position;
+    if (position.pixels > position.minScrollExtent + 20) return;
+    _newerDebounceTimer = Timer(_debounceDuration, () {});
+    onScrollToBottom().then((_) => _newerDebounceTimer?.cancel());
+  }
+
+  Future<bool> _scrollToMessage(
+    String messageId,
+    double alignment,
+    Duration? duration,
+    bool onlyIfHidden,
+  ) async {
+    _pendingAlign = null;
+    _pendingAlignExtent = null;
+    // Wait for the messages just set to be laid out.
+    await WidgetsBinding.instance.endOfFrame;
+    if (!mounted || !chatController.hasClients) return false;
+    final groups = chatController.messageGroups;
+    final groupIndex = groups.indexWhere((g) => g.messages.any((m) => m.id == messageId));
+    if (groupIndex < 0) return false;
+    final olderCount = chatController.olderGroupCount ?? groups.length;
+    final (listController, index) = groupIndex < olderCount
+        ? (_olderListController, olderCount - 1 - groupIndex) // newest first
+        : (_newerListController, groupIndex - olderCount); // oldest first
+    if (!listController.isAttached) return false;
+
+    if (duration != null) {
+      // Animate to the group, which builds it, then to the message itself.
+      if (!_isBuilt(messageId)) {
+        listController.animateToItem(
+          index: index,
+          scrollController: chatController,
+          alignment: alignment,
+          duration: (_) => duration,
+          curve: (_) => Curves.easeInOut,
+        );
+        await Future<void>.delayed(duration);
+        await WidgetsBinding.instance.endOfFrame;
+        if (!mounted) return false;
+      }
+      final messageContext = _messageContexts[messageId];
+      if (messageContext == null || !messageContext.mounted) return false;
+      await Scrollable.ensureVisible(
+        messageContext,
+        alignment: alignment,
+        duration: duration,
+        curve: Curves.easeInOut,
+      );
+      return mounted;
+    }
+
+    // Jump to the group until the message is built, laying the list out right away each time, so
+    // only the final position is drawn. jumpToItem relies on estimated extents for groups that
+    // were never laid out, so one jump can land short of the group.
+    for (var attempt = 0; attempt < 3 && !_isBuilt(messageId); attempt++) {
+      listController.jumpToItem(
+        index: index,
+        scrollController: chatController,
+        alignment: alignment,
+      );
+      context.findRenderObject()?.owner?.flushLayout();
+    }
+    // jumpToItem does not move the list above the anchor of setMessagesAround. Step a viewport at
+    // a time toward the message instead, still before anything is drawn.
+    if (!_isBuilt(messageId)) _stepUntilBuilt(messageId, groupIndex);
+    return _alignBuilt(messageId, alignment, onlyIfHidden);
+  }
+
+  /// Moves the list so the built message [messageId] sits at [alignment] of the viewport.
+  ///
+  /// When the list cannot scroll far enough because the messages beyond the target are not loaded
+  /// yet, the move is clamped, so it is done again once more messages are added (see [_onScroll]).
+  bool _alignBuilt(String messageId, double alignment, bool onlyIfHidden) {
+    _pendingAlign = null;
+    final messageContext = _messageContexts[messageId];
+    final box = messageContext != null && messageContext.mounted
+        ? messageContext.findRenderObject()
+        : null;
+    if (box is! RenderBox || !box.attached) return false;
+    // Measured on screen rather than with RenderAbstractViewport.getOffsetToReveal, which is off
+    // for the part of the split list below the anchor (reverse growth).
+    final viewport = RenderAbstractViewport.of(box) as RenderBox;
+    final rect = MatrixUtils.transformRect(box.getTransformTo(viewport), Offset.zero & box.size);
+    final height = viewport.size.height;
+    if (onlyIfHidden && rect.top >= 0 && rect.bottom <= height) return true;
+    // Alignment 0 is the bottom. In the reversed list a larger offset moves the content down.
+    final position = chatController.position;
+    final delta = (1 - alignment) * height - rect.center.dy;
+    final wanted = position.pixels + delta;
+    final target = wanted.clamp(position.minScrollExtent, position.maxScrollExtent);
+    if ((target - position.pixels).abs() > 0.5) chatController.jumpTo(target);
+    if ((wanted - target).abs() > 1) {
+      _pendingAlign = (
+        messageId: messageId,
+        alignment: alignment,
+        pixels: chatController.position.pixels,
+      );
+      _pendingAlignExtent = (position.minScrollExtent, position.maxScrollExtent);
+    }
+    return true;
+  }
+
+  // A move of _alignBuilt that was clamped by the loaded extent, to finish once more messages are
+  // added. Dropped when the list is scrolled away from where the move left it.
+  ({String messageId, double alignment, double pixels})? _pendingAlign;
+  bool _pendingAlignScheduled = false;
+
+  void _schedulePendingAlign() {
+    if (_pendingAlign == null || _pendingAlignScheduled) return;
+    _pendingAlignScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _pendingAlignScheduled = false;
+      final pending = _pendingAlign;
+      if (pending == null || !mounted || !chatController.hasClients) return;
+      if ((chatController.position.pixels - pending.pixels).abs() > 0.5 ||
+          !_isBuilt(pending.messageId)) {
+        _pendingAlign = null;
+        return;
+      }
+      final position = chatController.position;
+      final before = (position.minScrollExtent, position.maxScrollExtent);
+      // Only worth another try when the scroll extent grew.
+      if (before == _pendingAlignExtent) return;
+      _pendingAlignExtent = before;
+      _alignBuilt(pending.messageId, pending.alignment, false);
+    });
+  }
+
+  (double, double)? _pendingAlignExtent;
+
+  void _stepUntilBuilt(String messageId, int groupIndex) {
+    final groups = chatController.messageGroups;
+    int? builtGroupIndex() {
+      for (final entry in _messageContexts.entries) {
+        if (!entry.value.mounted) continue;
+        final i = groups.indexWhere((g) => g.messages.any((m) => m.id == entry.key));
+        if (i >= 0) return i;
+      }
+      return null;
+    }
+
+    final owner = context.findRenderObject()?.owner;
+    for (var step = 0; step < 500 && !_isBuilt(messageId); step++) {
+      final shown = builtGroupIndex();
+      if (shown == null) return;
+      final position = chatController.position;
+      // The list is reversed: older messages are at larger offsets.
+      final direction = groupIndex < shown ? 1 : -1;
+      final target = (position.pixels + direction * position.viewportDimension * 0.8).clamp(
+        position.minScrollExtent,
+        position.maxScrollExtent,
+      );
+      if (target == position.pixels) return;
+      chatController.jumpTo(target);
+      owner?.flushLayout();
+    }
+  }
+
+  bool _isBuilt(String messageId) {
+    final messageContext = _messageContexts[messageId];
+    return messageContext != null && messageContext.mounted;
   }
 
   void _onSizeChanged(Size? oldSize, Size? newSize) {
@@ -264,8 +503,27 @@ class _ChatState extends State<Chat> {
 
   @override
   Widget build(BuildContext context) {
+    final search = widget.searchController;
+    final chat = _buildChat(context);
+    if (search == null) return chat;
+    return ChatSearchScope(
+      controller: search,
+      child: ChatSearchActions(controller: search, child: chat),
+    );
+  }
+
+  Widget _buildChat(BuildContext context) {
+    final search = widget.searchController;
     return Column(
       children: [
+        if (search != null)
+          ListenableBuilder(
+            listenable: search,
+            builder: (context, _) => search.isOpen
+                ? widget.configuration.searchBarBuilder?.call(context, search) ??
+                      ChatSearchBar(controller: search)
+                : const SizedBox.shrink(),
+          ),
         Expanded(
           child: Stack(
             children: [
@@ -299,33 +557,64 @@ class _ChatState extends State<Chat> {
     return SizeDetectedWidget(
       type: SizeDetectedWidgetType.height,
       onChange: _onSizeChanged,
-      child: CustomScrollView(
-        // Newest message at offset 0: the chat opens at the bottom, and older messages added at
-        // the far end do not move what is on screen.
-        reverse: true,
-        scrollBehavior: const ScrollBehavior().copyWith(
-          scrollbars: false,
-          dragDevices: {
-            PointerDeviceKind.touch,
-            PointerDeviceKind.stylus,
-            PointerDeviceKind.trackpad,
-          },
-        ),
-        controller: chatController,
-        slivers: [
-          const SliverGap(30),
-          _StartAtTop(
-            enabled: widget.configuration.messagesStartAtTop,
-            // The gap after the messages (above them in the reversed list) stays visible.
-            trailingExtent: 30,
-            sliver: ListenableBuilder(
-              listenable: chatController.messagesRevision,
-              builder: _buildMessageSliverList,
+      child: ListenableBuilder(
+        listenable: chatController.messagesRevision,
+        builder: _buildScrollView,
+      ),
+    );
+  }
+
+  Widget _buildScrollView(BuildContext context, Widget? child) {
+    final groups = List<MessageGroup>.of(chatController.messageGroups);
+    final olderCount = chatController.olderGroupCount;
+    final split = olderCount != null;
+    return CustomScrollView(
+      // Newest message at offset 0: the chat opens at the bottom, and older messages added at
+      // the far end do not move what is on screen.
+      // After ChatController.setMessagesAround the older messages grow up from the anchor and
+      // the newer ones down from it, so loading either side does not move what is on screen.
+      reverse: true,
+      center: split ? _olderSliverKey : null,
+      // The anchor message's group starts at ChatController.setMessagesAround's alignment, so
+      // the first frame already shows it.
+      anchor: split ? chatController.splitAlignment : 0,
+      scrollBehavior: const ScrollBehavior().copyWith(
+        scrollbars: false,
+        dragDevices: {
+          PointerDeviceKind.touch,
+          PointerDeviceKind.stylus,
+          PointerDeviceKind.trackpad,
+        },
+      ),
+      controller: chatController,
+      slivers: [
+        const SliverGap(30, key: ValueKey('chat_toolkit.bottom_gap')),
+        if (split)
+          KeyedSubtree(
+            key: const ValueKey('chat_toolkit.newer'),
+            child: _buildMessageSliverList(
+              groups,
+              start: olderCount,
+              end: groups.length,
+              newestFirst: false,
+              listController: _newerListController,
             ),
           ),
-          const SliverGap(30),
-        ],
-      ),
+        _StartAtTop(
+          key: _olderSliverKey,
+          enabled: widget.configuration.messagesStartAtTop && !split,
+          // The gap after the messages (above them in the reversed list) stays visible.
+          trailingExtent: 30,
+          sliver: _buildMessageSliverList(
+            groups,
+            start: 0,
+            end: olderCount ?? groups.length,
+            newestFirst: true,
+            listController: _olderListController,
+          ),
+        ),
+        const SliverGap(30, key: ValueKey('chat_toolkit.top_gap')),
+      ],
     );
   }
 
@@ -333,10 +622,18 @@ class _ChatState extends State<Chat> {
   // not grow with per-group work. Widgets are built lazily by SliverChildBuilderDelegate, which calls
   // _buildGroupItem only for the indices that enter the viewport; the date separator is computed
   // there, for those indices only.
-  Widget _buildMessageSliverList(BuildContext context, Widget? child) {
-    final groups = List<MessageGroup>.of(chatController.messageGroups);
-    // The list is reversed: index 0 is the newest group.
-    int groupIndexAt(int index) => groups.length - 1 - index;
+  // Builds groups [start, end). In the reversed scroll view the older part lists them newest
+  // first (index 0 at the bottom); the newer part, below the anchor, oldest first.
+  Widget _buildMessageSliverList(
+    List<MessageGroup> groups, {
+    required int start,
+    required int end,
+    required bool newestFirst,
+    required ListController listController,
+  }) {
+    int groupIndexAt(int index) => newestFirst ? end - 1 - index : start + index;
+    // Below the anchor a new message is added out of view, so it is not animated.
+    final animateAppear = newestFirst;
 
     bool showDateDividerAt(int groupIndex) =>
         groupIndex == 0 ||
@@ -351,14 +648,15 @@ class _ChatState extends State<Chat> {
     // It is called only for the children currently built (the visible ones, usually near the newest
     // end), so a search from the end is cheaper than indexing every group on each rebuild.
     int? indexOfGroup(MessageGroup group) {
-      final groupIndex = groups.lastIndexWhere((g) => identical(g, group));
-      if (groupIndex < 0) return null;
-      return groups.length - 1 - groupIndex;
+      final groupIndex = groups.lastIndexWhere((g) => identical(g, group), end - 1);
+      if (groupIndex < start) return null;
+      return newestFirst ? end - 1 - groupIndex : groupIndex - start;
     }
 
     return SliverPadding(
       padding: widget.configuration.padding,
       sliver: SuperSliverList(
+        listController: listController,
         delegate: SliverChildBuilderDelegate(
           (context, index) {
             final groupIndex = groupIndexAt(index);
@@ -366,9 +664,10 @@ class _ChatState extends State<Chat> {
               context,
               groups[groupIndex],
               showDateDivider: showDateDividerAt(groupIndex),
+              animateAppear: animateAppear,
             );
           },
-          childCount: groups.length,
+          childCount: end - start,
           findChildIndexCallback: (key) {
             final value = key is ObjectKey ? key.value : null;
             return value is MessageGroup ? indexOfGroup(value) : null;
@@ -382,6 +681,7 @@ class _ChatState extends State<Chat> {
     BuildContext context,
     MessageGroup group, {
     required bool showDateDivider,
+    required bool animateAppear,
   }) {
     final bool isPrevProfile =
         (group.isSender && widget.configuration.senderAlignment == ChatAlignment.start) ||
@@ -392,7 +692,7 @@ class _ChatState extends State<Chat> {
     // only matters when the item is first built, which is when the pending id is taken.
     final appearDuration = widget.configuration.messageAppearAnimationDuration;
     bool takeAppear(Message message) =>
-        appearDuration != null && chatController.takeAppearAnimation(message.id);
+        appearDuration != null && chatController.takeAppearAnimation(message.id) && animateAppear;
 
     return _MessageAppear(
       key: ObjectKey(group),
@@ -442,19 +742,25 @@ class _ChatState extends State<Chat> {
                         children: [
                           // The gap above a bubble belongs to it, so it animates in with it.
                           if (i > 0) const Gap(8),
-                          MessageBubble(
-                            group.messages[i],
+                          _MessageSlot(
+                            message: group.messages[i],
+                            controller: chatController,
+                            contexts: _messageContexts,
                             configuration: widget.configuration,
-                            showTime: i == group.messages.length - 1,
-                            onDelete: () async {
-                              final message = group.messages[i];
-                              final onDelete = widget.onDeleteFailedMessage;
-                              if (onDelete != null && !await onDelete(message)) return;
-                              chatController.removeMessageFromGroup(group, message);
-                            },
-                            onRetry: () {
-                              chatController.retryMessage(group.messages[i]);
-                            },
+                            child: MessageBubble(
+                              group.messages[i],
+                              configuration: widget.configuration,
+                              showTime: i == group.messages.length - 1,
+                              onDelete: () async {
+                                final message = group.messages[i];
+                                final onDelete = widget.onDeleteFailedMessage;
+                                if (onDelete != null && !await onDelete(message)) return;
+                                chatController.removeMessageFromGroup(group, message);
+                              },
+                              onRetry: () {
+                                chatController.retryMessage(group.messages[i]);
+                              },
+                            ),
                           ),
                         ],
                       ),
@@ -497,6 +803,105 @@ class _ChatState extends State<Chat> {
           );
     }
     return widget.customInputField?.call(context, chatController) ?? const SizedBox.shrink();
+  }
+}
+
+/// Registers the context of a message, so [ChatController.scrollToMessage] can reveal it, and
+/// plays [ChatConfiguration.messageHighlightBuilder] when it is highlighted.
+class _MessageSlot extends StatefulWidget {
+  const _MessageSlot({
+    required this.message,
+    required this.controller,
+    required this.contexts,
+    required this.configuration,
+    required this.child,
+  });
+
+  final Message message;
+  String get messageId => message.id;
+  final ChatController controller;
+  final Map<String, BuildContext> contexts;
+  final ChatConfiguration configuration;
+  final Widget child;
+
+  @override
+  State<_MessageSlot> createState() => _MessageSlotState();
+}
+
+class _MessageSlotState extends State<_MessageSlot> with SingleTickerProviderStateMixin {
+  AnimationController? _highlight;
+  int? _serial;
+
+  @override
+  void initState() {
+    super.initState();
+    _register();
+    widget.controller.highlightedMessage.addListener(_onHighlightChanged);
+    _onHighlightChanged();
+  }
+
+  @override
+  void didUpdateWidget(_MessageSlot oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.messageId != widget.messageId) {
+      _unregister(oldWidget.messageId);
+      _register();
+    }
+    if (oldWidget.controller != widget.controller) {
+      oldWidget.controller.highlightedMessage.removeListener(_onHighlightChanged);
+      widget.controller.highlightedMessage.addListener(_onHighlightChanged);
+    }
+  }
+
+  void _register() {
+    if (widget.messageId.isNotEmpty) widget.contexts[widget.messageId] = context;
+  }
+
+  // A message scrolled out of the list is deactivated before it is unmounted; it can no longer
+  // be revealed.
+  @override
+  void deactivate() {
+    _unregister(widget.messageId);
+    super.deactivate();
+  }
+
+  @override
+  void activate() {
+    super.activate();
+    _register();
+  }
+
+  void _unregister(String messageId) {
+    if (identical(widget.contexts[messageId], context)) widget.contexts.remove(messageId);
+  }
+
+  void _onHighlightChanged() {
+    final value = widget.controller.highlightedMessage.value;
+    if (value == null || value.messageId != widget.messageId || value.serial == _serial) return;
+    final serial = _serial = value.serial;
+    final highlight = _highlight ??= AnimationController(vsync: this);
+    highlight.duration = widget.configuration.messageHighlightDuration;
+    // Runs from 1 (fully highlighted) down to 0.
+    highlight.reverse(from: 1).whenComplete(() {
+      if (mounted) widget.controller.clearHighlight(serial);
+    });
+    setState(() {});
+  }
+
+  @override
+  void dispose() {
+    widget.controller.highlightedMessage.removeListener(_onHighlightChanged);
+    _unregister(widget.messageId);
+    _highlight?.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final highlight = _highlight;
+    final child = ChatMessageScope(message: widget.message, child: widget.child);
+    if (highlight == null) return child;
+    return widget.configuration.buildMessageHighlight(context, child, highlight);
   }
 }
 
@@ -577,8 +982,12 @@ class _MessageAppearState extends State<_MessageAppear> with SingleTickerProvide
 /// scroll offset 0 (below the messages, since the list is reversed), so the messages move to the top.
 /// Once the list fills the viewport the padding is 0 and nothing changes.
 class _StartAtTop extends SingleChildRenderObjectWidget {
-  const _StartAtTop({required this.enabled, required this.trailingExtent, required Widget sliver})
-    : super(child: sliver);
+  const _StartAtTop({
+    super.key,
+    required this.enabled,
+    required this.trailingExtent,
+    required Widget sliver,
+  }) : super(child: sliver);
 
   final bool enabled;
 

@@ -6,6 +6,8 @@ import 'chat_controller.dart';
 import 'message/bubble_menu.dart';
 import 'message/entity/message.dart';
 import 'message/message_loading.dart';
+import 'search/chat_search.dart';
+import 'search/chat_search_controller.dart';
 
 /// Appearance options for message bubbles, profiles and timestamps.
 ///
@@ -339,6 +341,57 @@ class ChatConfiguration {
   /// stays at the bottom. Defaults to `false`.
   final bool messagesStartAtTop;
 
+  /// Builds the highlight of a message revealed by
+  /// [ChatController.scrollToMessage] or [ChatController.setMessagesAround].
+  ///
+  /// [animation] runs from `1.0` down to `0.0` over
+  /// [messageHighlightDuration]; wrap [child] (the message bubble row) in
+  /// something that fades with it. When `null`, a translucent yellow
+  /// background fades out behind the message.
+  ///
+  /// ```dart
+  /// ChatConfiguration(
+  ///   messageHighlightBuilder: (context, child, animation) => FadeTransition(
+  ///     opacity: Tween(begin: 1.0, end: 0.4).animate(animation),
+  ///     child: child,
+  ///   ),
+  /// )
+  /// ```
+  final Widget Function(BuildContext context, Widget child, Animation<double> animation)?
+      messageHighlightBuilder;
+
+  /// How long the highlight of [messageHighlightBuilder] lasts. Defaults to
+  /// 1.5 seconds.
+  final Duration messageHighlightDuration;
+
+  /// Builds the search bar shown above the messages while the
+  /// `Chat.searchController` is open.
+  ///
+  /// Return a [ChatSearchBar] with your texts and styles, or a bar of your
+  /// own driven by the [ChatSearchController]. Return a `SizedBox.shrink()`
+  /// to place the search elsewhere (e.g. in your app bar). When `null`, a
+  /// default [ChatSearchBar] is shown.
+  ///
+  /// ```dart
+  /// ChatConfiguration(
+  ///   searchBarBuilder: (context, search) => ChatSearchBar(
+  ///     controller: search,
+  ///     hintText: 'Search this chat',
+  ///   ),
+  /// )
+  /// ```
+  final Widget Function(BuildContext context, ChatSearchController search)? searchBarBuilder;
+
+  /// Keyboard shortcuts of the search, active while the chat is shown,
+  /// wherever the focus is. Map key combinations to [OpenChatSearchIntent],
+  /// [CloseChatSearchIntent], [ShowOlderSearchResultIntent] and
+  /// [ShowNewerSearchResultIntent]. Defaults to
+  /// [defaultChatSearchShortcuts]; pass `{}` to turn them off.
+  ///
+  /// To bind keys outside the chat, call the [ChatSearchController] methods
+  /// from your own [Shortcuts] or key handler.
+  final Map<ShortcutActivator, Intent> searchShortcuts;
+
   /// Creates a [ChatConfiguration].
   const ChatConfiguration({
     this.senderAlignment = ChatAlignment.end,
@@ -351,6 +404,10 @@ class ChatConfiguration {
     this.padding = const EdgeInsets.symmetric(horizontal: 30),
     this.messageAppearAnimationDuration,
     this.messagesStartAtTop = false,
+    this.messageHighlightBuilder,
+    this.messageHighlightDuration = const Duration(milliseconds: 1500),
+    this.searchBarBuilder,
+    this.searchShortcuts = defaultChatSearchShortcuts,
   });
 
   /// Whether sender messages are on the leading side
@@ -358,6 +415,26 @@ class ChatConfiguration {
   ///
   /// Used by the toolkit's layout; apps can read [senderAlignment] instead.
   bool get isPrevProfile => senderAlignment == ChatAlignment.start;
+
+  /// Builds the highlight of a message with [messageHighlightBuilder] or the
+  /// default one.
+  ///
+  /// Called by [Chat]; apps rarely need to call it.
+  Widget buildMessageHighlight(BuildContext context, Widget child, Animation<double> animation) {
+    final builder = messageHighlightBuilder;
+    if (builder != null) return builder(context, child, animation);
+    return AnimatedBuilder(
+      animation: animation,
+      child: child,
+      builder: (context, child) => DecoratedBox(
+        decoration: BoxDecoration(
+          color: const Color(0xFFFFD54F).withValues(alpha: 0.45 * animation.value),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: child,
+      ),
+    );
+  }
 
   /// Builds the date separator with [dateSeparatorBuilder] or the default one.
   ///
