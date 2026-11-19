@@ -692,4 +692,10 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get boxMinHeight => 'Minimum height';
+
+  @override
+  String get srcPreview => 'Message summary';
+
+  @override
+  String get newMessageArrived => 'New message';
 }

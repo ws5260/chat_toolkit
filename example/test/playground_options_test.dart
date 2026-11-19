@@ -118,6 +118,54 @@ void main() {
     expect(find.byType(ChatSearchBar), findsNothing);
   });
 
+  /// Opens message #12, which is not loaded, so an earlier part of the conversation is shown.
+  Future<void> openEarlierPart(WidgetTester tester) async {
+    await tester.tap(find.byTooltip('Search'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+        find.descendant(of: find.byType(ChatSearchBar), matching: find.byType(TextField)), '#12');
+    await tester.testTextInput.receiveAction(TextInputAction.search);
+    await tester.pump(const Duration(seconds: 2));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Close search'));
+    await tester.pumpAndSettle();
+    expect(find.text('Jump to latest'), findsOneWidget);
+  }
+
+  testWidgets('a message that arrives while away replaces the jump button', (tester) async {
+    await _open(tester, 1600);
+    await openEarlierPart(tester);
+
+    await tester.tap(find.text('Receive'));
+    await tester.pumpAndSettle();
+    expect(find.text('Jump to latest'), findsNothing);
+    expect(find.text('New message'), findsOneWidget);
+    // Not added in the middle of the earlier part.
+    expect(find.text('New message (1)'), findsNothing);
+
+    await tester.tap(find.text('New message'));
+    await tester.pump(const Duration(seconds: 1));
+    await tester.pumpAndSettle();
+    expect(find.text('New message'), findsNothing);
+    expect(find.text('New message (1)'), findsOneWidget);
+  });
+
+  testWidgets('a custom notice shows who wrote what', (tester) async {
+    await _open(tester, 1600);
+    await _tap(tester, find.descendant(
+        of: find.byKey(const ValueKey('look-notice')),
+        matching: find.byKey(ValueKey('segment-${Look.custom}'))));
+    await _tap(tester, find.byKey(const Key('studio-close')));
+    await openEarlierPart(tester);
+
+    await tester.tap(find.text('Receive'));
+    await tester.pumpAndSettle();
+    // Name and summary (Message.previewText) of the message, in the notice.
+    expect(find.descendant(of: find.byType(Stack), matching: find.text('New message (1)')),
+        findsOneWidget);
+    expect(find.text('Jump to latest'), findsNothing);
+  });
+
   group('studio code', () {
     test('the search bar is wired to the search controller', () {
       final spec = defaultSpec(Part.search)..box.radius = 7;

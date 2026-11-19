@@ -391,6 +391,7 @@ class _StudioEditorState extends State<StudioEditor> {
   String _sourceLabel(TextSource s) => switch (s) {
         TextSource.literal => l.srcLiteral,
         TextSource.name => l.srcName,
+        TextSource.preview => l.srcPreview,
         TextSource.time => l.srcTime,
         TextSource.date => l.srcDate,
         TextSource.resultCount => l.srcCount,

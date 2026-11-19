@@ -266,5 +266,7 @@
     }
   },
   "previewNotice": "Show it: scroll up and receive",
-  "boxMinHeight": "Minimum height"
+  "boxMinHeight": "Minimum height",
+  "srcPreview": "Message summary",
+  "newMessageArrived": "New message"
 }

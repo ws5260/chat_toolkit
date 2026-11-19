@@ -214,5 +214,7 @@
   "sectionPartsDesc": "カスタムを選ぶとチャットの横に編集パネルが開きます。要素の追加・削除・並べ替え、要素とボックスのスタイルを自由に変更でき、すぐにチャットに反映されます。",
   "studioTitle": "{part}のデザイン",
   "previewNotice": "表示してみる: 上にスクロールして受信",
-  "boxMinHeight": "最小の高さ"
+  "boxMinHeight": "最小の高さ",
+  "srcPreview": "メッセージの要約",
+  "newMessageArrived": "新着メッセージ"
 }

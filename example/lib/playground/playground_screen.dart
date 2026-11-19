@@ -45,6 +45,11 @@ class _PlaygroundPageState extends State<PlaygroundPage> {
   bool _hasNoMoreMessage = false;
 
   ChatSearchController? _searchController;
+
+  /// A message that arrived while an earlier part of the conversation was shown. It is not added
+  /// there (it belongs after the newest message), so it is announced in place of the "jump to
+  /// latest" button until the latest messages are shown.
+  Message? _arrivedWhileAway;
   ChatSearchController get _search => _searchController!;
   int _incomingCount = 0;
   bool _showSettings = false; // narrow layout only
@@ -168,6 +173,8 @@ class _PlaygroundPageState extends State<PlaygroundPage> {
       final page = await _server.fetchNewer(_room, afterIndex: newest);
       if (!mounted || session != _session) return;
       _chatController.addNewerMessages(page.messages, hasMore: page.hasMore);
+      // Scrolled down to the newest: the message that arrived meanwhile is loaded now.
+      if (!page.hasMore) setState(() => _arrivedWhileAway = null);
     } finally {
       if (mounted && session == _session) setState(() => _loadingNewer = false);
     }
@@ -180,7 +187,7 @@ class _PlaygroundPageState extends State<PlaygroundPage> {
     if (!mounted || session != _session) return;
     _chatController.setMessages(messages);
     _hasNoMoreMessage = messages.length < FakeChatServer.pageSize;
-    setState(() {});
+    setState(() => _arrivedWhileAway = null);
   }
 
   // ---------------------------------------------------------------------------
@@ -208,19 +215,23 @@ class _PlaygroundPageState extends State<PlaygroundPage> {
   // Sending / receiving
 
   Future<void> _receive([String? text]) async {
-    // A message from the server belongs after the newest one, so return to the present first.
-    if (_chatController.hasNewerMessages) await _goToLatest();
-    if (!mounted) return;
     _incomingCount++;
     final room = _room;
-    final id = 'in_${DateTime.now().microsecondsSinceEpoch}';
+    final message = ReceiverMessage(
+      id: 'in_${DateTime.now().microsecondsSinceEpoch}',
+      name: _server.otherName,
+      timestamp: DateTime.now().toIso8601String(),
+      elements: [DemoTextElement(text ?? l.incomingMessage(_incomingCount))],
+    );
+    // While an earlier part is shown, the message belongs after messages that are not loaded:
+    // keep it on the server and announce it instead of pulling the reader away.
+    if (_chatController.hasNewerMessages) {
+      _server.post(room, message);
+      setState(() => _arrivedWhileAway = message);
+      return;
+    }
     _chatController.dispatchMessage(
-      ReceiverMessage(
-        id: id,
-        name: _server.otherName,
-        timestamp: DateTime.now().toIso8601String(),
-        elements: [DemoTextElement(text ?? l.incomingMessage(_incomingCount))],
-      ),
+      message,
       onDispatch: (m) async {
         _server.post(room, m);
         return m;
@@ -301,6 +312,7 @@ class _PlaygroundPageState extends State<PlaygroundPage> {
     StudioElement e, {
     String name = '',
     String timestamp = '',
+    String preview = '',
     bool isRead = false,
     ChatSearchController? search,
   }) {
@@ -309,6 +321,7 @@ class _PlaygroundPageState extends State<PlaygroundPage> {
     return switch (e.source) {
       TextSource.literal => e.text,
       TextSource.name => name,
+      TextSource.preview => preview,
       TextSource.time => timestamp.isEmpty
           ? ''
           : (e.use24h ? DateFormat.Hm(locale) : DateFormat.jm(locale)).format(date()),
@@ -336,11 +349,13 @@ class _PlaygroundPageState extends State<PlaygroundPage> {
       };
 
   Widget _render(Part part, {StudioSpec? spec, String name = '', String timestamp = '',
-          bool isRead = false, Widget? content, VoidCallback? onTap, bool aligned = true}) =>
+          String preview = '', bool isRead = false, Widget? content, VoidCallback? onTap,
+          bool aligned = true}) =>
       renderStudio(
         spec ?? s.spec(part),
         StudioBinding(
-          text: (e) => _textOf(e, name: name, timestamp: timestamp, isRead: isRead),
+          text: (e) =>
+              _textOf(e, name: name, timestamp: timestamp, preview: preview, isRead: isRead),
           content: content,
           isRead: isRead,
           actionLabel: _actionLabel,
@@ -384,8 +399,7 @@ class _PlaygroundPageState extends State<PlaygroundPage> {
               style: s.textStyle(Part.search),
             ),
       newReceiveMessageNotificationBuilder: _custom(Part.notice)
-          ? (context, message, controller) => _render(Part.notice,
-              name: message.name, timestamp: message.timestamp, onTap: controller.scrollToBottom)
+          ? (context, message, controller) => _notice(message, controller.scrollToBottom)
           : null,
       dateSeparatorBuilder: _builder<Widget Function(BuildContext, String)>(
         Part.separator,
@@ -782,44 +796,80 @@ class _PlaygroundPageState extends State<PlaygroundPage> {
     }
     return Stack(children: [
       _chatView(),
-      // Shown while an earlier part of the conversation is open (after a search result).
-      Positioned(
-        right: 16,
-        bottom: s.readOnly ? 80 : 84,
-        child: ListenableBuilder(
-          listenable: _chatController,
-          builder: (context, _) => AnimatedSwitcher(
-            duration: const Duration(milliseconds: 200),
-            child: _chatController.hasNewerMessages
-                ? Material(
-                    key: const ValueKey('jump-to-latest'),
-                    color: Colors.white,
-                    elevation: 3,
-                    shape: const StadiumBorder(),
-                    child: InkWell(
-                      customBorder: const StadiumBorder(),
+      // While an earlier part of the conversation is open (after a search result): a message that
+      // arrived meanwhile, or else a button back to the latest messages.
+      ListenableBuilder(
+        listenable: _chatController,
+        builder: (context, _) {
+          final bottom = s.readOnly ? 80.0 : 84.0;
+          final arrived = _arrivedWhileAway;
+          if (arrived != null && _custom(Part.notice)) {
+            return Positioned(
+              left: 0,
+              right: 0,
+              bottom: bottom - 12,
+              child: _notice(arrived, _goToLatest),
+            );
+          }
+          return Positioned(
+            right: 16,
+            bottom: bottom,
+            child: AnimatedSwitcher(
+              duration: const Duration(milliseconds: 200),
+              child: arrived != null
+                  ? _pill(
+                      key: const ValueKey('new-message'),
+                      icon: Icons.mark_chat_unread_outlined,
+                      label: l.newMessageArrived,
                       onTap: _goToLatest,
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
-                        child: Row(mainAxisSize: MainAxisSize.min, children: [
-                          const Icon(Icons.keyboard_double_arrow_down_rounded,
-                              size: 18, color: SiteColors.blue),
-                          const SizedBox(width: 6),
-                          Text(l.jumpToLatest,
-                              style: const TextStyle(
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w600,
-                                  color: SiteColors.grey900)),
-                        ]),
-                      ),
-                    ),
-                  )
-                : const SizedBox.shrink(),
-          ),
-        ),
+                    )
+                  : _chatController.hasNewerMessages
+                      ? _pill(
+                          key: const ValueKey('jump-to-latest'),
+                          icon: Icons.keyboard_double_arrow_down_rounded,
+                          label: l.jumpToLatest,
+                          onTap: _goToLatest,
+                        )
+                      : const SizedBox.shrink(),
+            ),
+          );
+        },
       ),
     ]);
   }
+
+  /// The new message notice designed in the studio, with who wrote what.
+  Widget _notice(Message message, VoidCallback onTap) => _render(Part.notice,
+      name: message.name,
+      timestamp: message.timestamp,
+      preview: message.previewText,
+      onTap: onTap);
+
+  Widget _pill(
+          {required Key key,
+          required IconData icon,
+          required String label,
+          required VoidCallback onTap}) =>
+      Material(
+        key: key,
+        color: Colors.white,
+        elevation: 3,
+        shape: const StadiumBorder(),
+        child: InkWell(
+          customBorder: const StadiumBorder(),
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+            child: Row(mainAxisSize: MainAxisSize.min, children: [
+              Icon(icon, size: 18, color: SiteColors.blue),
+              const SizedBox(width: 6),
+              Text(label,
+                  style: const TextStyle(
+                      fontSize: 13, fontWeight: FontWeight.w600, color: SiteColors.grey900)),
+            ]),
+          ),
+        ),
+      );
 
   Widget _chatView() {
     return Chat(

@@ -186,7 +186,10 @@ Widget? _element(StudioElement e, StudioBinding b, {required bool row, bool wrap
     case ElementKind.text:
       final text = b.text(e);
       if (text.isEmpty) return null;
-      final label = Text(text, style: _style(e));
+      // A message summary stays on one line.
+      final label = e.source == TextSource.preview
+          ? Text(text, style: _style(e), maxLines: 1, overflow: TextOverflow.ellipsis)
+          : Text(text, style: _style(e));
       return row && !wrap ? Flexible(child: label) : label;
     case ElementKind.icon:
       return Icon((b.isRead ? e.icon2 : e.icon).data, size: e.size, color: e.color);

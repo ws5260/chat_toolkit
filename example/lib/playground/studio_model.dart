@@ -12,7 +12,17 @@ enum Look { library, custom, hidden }
 enum ElementKind { content, text, icon, field, button, badge, avatar, spacer, divider }
 
 /// Where the text of a text or badge element comes from.
-enum TextSource { literal, name, time, date, resultCount, readState, noticeLabel, readOnlyLabel }
+enum TextSource {
+  literal,
+  name,
+  preview, // Message.previewText: a one-line summary of the message
+  time,
+  date,
+  resultCount,
+  readState,
+  noticeLabel,
+  readOnlyLabel,
+}
 
 /// What a button element does.
 enum ButtonAction { none, send, attach, older, newer, close }
@@ -243,7 +253,7 @@ PartRules rulesOf(Part part) => switch (part) {
         ),
       Part.notice => const PartRules(
           kinds: [ElementKind.text, ElementKind.icon, ElementKind.avatar],
-          sources: [TextSource.noticeLabel, TextSource.name, TextSource.literal],
+          sources: [TextSource.preview, TextSource.name, TextSource.noticeLabel, TextSource.literal],
         ),
       Part.separator => const PartRules(
           kinds: [ElementKind.text, ElementKind.icon, ElementKind.divider],
@@ -373,22 +383,28 @@ StudioSpec defaultSpec(Part part, {bool receiver = false}) => switch (part) {
                 radius: 999),
           ],
         ),
+      // Who wrote what, in one line: avatar, name and a summary of the message.
       Part.notice => StudioSpec(
-          gap: 6,
+          gap: 8,
           box: StudioBox(
             background: SiteColors.grey900,
             radius: 999,
             shadow: 8,
-            paddingH: 14,
-            paddingV: 8,
+            paddingH: 8,
+            paddingV: 6,
+            marginH: 16,
             marginV: 12,
             fill: false,
           ),
           elements: [
-            StudioElement(ElementKind.icon,
-                icon: StudioIcon.arrowDownward, size: 16, color: Colors.white),
+            StudioElement(ElementKind.avatar,
+                size: 24, radius: 0.5, background: SiteColors.blueWeak, color: SiteColors.blue),
             StudioElement(ElementKind.text,
-                source: TextSource.noticeLabel, fontSize: 13, color: Colors.white),
+                source: TextSource.name, fontSize: 13, bold: true, color: Colors.white),
+            StudioElement(ElementKind.text,
+                source: TextSource.preview, fontSize: 13, color: Colors.white70),
+            StudioElement(ElementKind.icon,
+                icon: StudioIcon.arrowDownward, size: 16, color: Colors.white70),
           ],
         ),
       Part.separator => StudioSpec(

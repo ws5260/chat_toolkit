@@ -674,4 +674,10 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get boxMinHeight => '最小高度';
+
+  @override
+  String get srcPreview => '消息摘要';
+
+  @override
+  String get newMessageArrived => '新消息';
 }

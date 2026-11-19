@@ -283,6 +283,10 @@ class DemoTextElement extends MessageElement {
   @override
   Widget toWidget(BuildContext context) => SearchHighlightedText(text);
 
+  // The summary for Message.previewText, e.g. in a new message notice.
+  @override
+  String get previewText => text;
+
   @override
   DemoTextElement copyWith() => DemoTextElement(text);
 }
@@ -299,6 +303,14 @@ class DemoImageElement extends MessageElement {
   @override
   Widget toWidget(BuildContext context) =>
       _DemoImage(key: ValueKey(key), cacheKey: key, height: height, loadDelay: loadDelay);
+
+  @override
+  String get previewText => switch (FakeChatServer.instance.language) {
+        'ko' => '사진',
+        'ja' => '写真',
+        'zh' => '图片',
+        _ => 'Photo',
+      };
 
   @override
   DemoImageElement copyWith() => DemoImageElement(key: key, height: height, loadDelay: loadDelay);

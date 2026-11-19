@@ -214,5 +214,7 @@
   "sectionPartsDesc": "커스텀을 고르면 채팅 옆에 편집 패널이 열려요. 요소를 추가·삭제·순서 변경하고, 요소와 박스의 스타일을 자유롭게 바꿀 수 있어요. 바꾸는 즉시 채팅에 반영됩니다.",
   "studioTitle": "{part} 디자인",
   "previewNotice": "미리보기: 위로 스크롤 후 메시지 받기",
-  "boxMinHeight": "최소 높이"
+  "boxMinHeight": "최소 높이",
+  "srcPreview": "메시지 요약",
+  "newMessageArrived": "새 메시지"
 }

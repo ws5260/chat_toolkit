@@ -678,4 +678,10 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get boxMinHeight => '최소 높이';
+
+  @override
+  String get srcPreview => '메시지 요약';
+
+  @override
+  String get newMessageArrived => '새 메시지';
 }

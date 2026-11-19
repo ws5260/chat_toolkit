@@ -1391,6 +1391,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Minimum height'**
   String get boxMinHeight;
+
+  /// No description provided for @srcPreview.
+  ///
+  /// In en, this message translates to:
+  /// **'Message summary'**
+  String get srcPreview;
+
+  /// No description provided for @newMessageArrived.
+  ///
+  /// In en, this message translates to:
+  /// **'New message'**
+  String get newMessageArrived;
 }
 
 class _AppLocalizationsDelegate

@@ -65,6 +65,9 @@ class TextMessageElement extends MessageElement {
   const TextMessageElement(this.text, {this.style});
 
   @override
+  String get previewText => text;
+
+  @override
   Widget toWidget(BuildContext context) {
     return Text(
       text,

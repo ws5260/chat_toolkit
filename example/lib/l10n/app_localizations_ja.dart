@@ -680,4 +680,10 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get boxMinHeight => '最小の高さ';
+
+  @override
+  String get srcPreview => 'メッセージの要約';
+
+  @override
+  String get newMessageArrived => '新着メッセージ';
 }

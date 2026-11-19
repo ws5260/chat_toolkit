@@ -214,5 +214,7 @@
   "sectionPartsDesc": "选择自定义后，聊天旁会打开编辑面板。可以添加、删除、排序元素，自由修改元素和容器样式，修改会立即反映到聊天中。",
   "studioTitle": "设计：{part}",
   "previewNotice": "预览：向上滚动并接收消息",
-  "boxMinHeight": "最小高度"
+  "boxMinHeight": "最小高度",
+  "srcPreview": "消息摘要",
+  "newMessageArrived": "新消息"
 }

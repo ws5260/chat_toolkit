@@ -147,6 +147,7 @@ class _Writer {
   String _text(StudioElement e) => switch (e.source) {
         TextSource.literal => _str(e.text),
         TextSource.name => part == Part.notice ? 'message.name' : 'name',
+        TextSource.preview => 'message.previewText',
         TextSource.time => 'DateFormat.${e.use24h ? 'Hm' : 'jm'}().format(DateTime.parse(${part == Part.bubble ? 'timestamp' : 'timestamp'}))',
         TextSource.date => 'DateFormat.${e.weekday ? 'MMMEd' : 'yMd'}().format(DateTime.parse(timestamp))',
         TextSource.resultCount => "'\${search.index + 1}/\${search.results.length}'",
@@ -172,7 +173,13 @@ class _Writer {
           ('child', 'child'),
         ]);
       case ElementKind.text:
-        final text = 'Text(${_text(e)}, style: const ${_textStyle(e)})';
+        final text = e.source == TextSource.preview
+            ? _call('Text', [
+                ('style', 'const ${_textStyle(e)}'),
+                ('maxLines', '1'),
+                ('overflow', 'TextOverflow.ellipsis'),
+              ], positional: _text(e))
+            : 'Text(${_text(e)}, style: const ${_textStyle(e)})';
         return e.source == TextSource.resultCount
             ? 'if (search.hasSearched) $text'
             : text;
